@@ -51,6 +51,7 @@ export function TransferPanel() {
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [copied, setCopied] = useState(false);
@@ -96,18 +97,38 @@ export function TransferPanel() {
   async function createTransfer() {
     if (!files.length || uploading) return;
     setUploading(true);
+    setUploadProgress(0);
     setError("");
     try {
       const body = new FormData();
       files.forEach((file) => body.append("files", file));
       body.append("days", days);
       body.append("message", message.trim());
-      const response = await fetch("/api/transfers", { method: "POST", body });
-      const payload = (await response.json()) as UploadResult & { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Die Übertragung konnte nicht erstellt werden.");
+      const payload = await new Promise<UploadResult>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", "/api/transfers");
+        request.responseType = "json";
+        request.upload.addEventListener("progress", (event) => {
+          if (!event.lengthComputable) return;
+          setUploadProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        });
+        request.addEventListener("load", () => {
+          const response = request.response as (UploadResult & { error?: string }) | null;
+          if (request.status >= 200 && request.status < 300 && response?.url) {
+            setUploadProgress(100);
+            resolve(response);
+            return;
+          }
+          reject(new Error(response?.error || "Die Übertragung konnte nicht erstellt werden."));
+        });
+        request.addEventListener("error", () => reject(new Error("Die Verbindung wurde beim Hochladen unterbrochen.")));
+        request.addEventListener("abort", () => reject(new Error("Der Upload wurde abgebrochen.")));
+        request.send(body);
+      });
       setResult(payload);
       setCopied(false);
     } catch (uploadError) {
+      setUploadProgress(0);
       setError(uploadError instanceof Error ? uploadError.message : "Die Übertragung konnte nicht erstellt werden.");
     } finally {
       setUploading(false);
@@ -130,6 +151,7 @@ export function TransferPanel() {
     setMessage("");
     setResult(null);
     setCopied(false);
+    setUploadProgress(0);
     setError("");
   }
 
@@ -223,9 +245,28 @@ export function TransferPanel() {
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
+      {uploading && (
+        <div className="upload-progress" aria-live="polite">
+          <div className="upload-progress-heading">
+            <span>{uploadProgress < 100 ? "Upload läuft" : "Upload wird abgeschlossen"}</span>
+            <strong>{uploadProgress}%</strong>
+          </div>
+          <div
+            className="upload-progress-track"
+            role="progressbar"
+            aria-label="Upload-Fortschritt"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={uploadProgress}
+          >
+            <span style={{ width: `${uploadProgress}%` }} />
+          </div>
+        </div>
+      )}
+
       <button className="primary-button" type="button" disabled={!files.length || uploading} onClick={createTransfer}>
         {uploading ? <LoaderCircle className="spinner" size={19} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
-        {uploading ? "Wird hochgeladen …" : "Freigabelink erstellen"}
+        {uploading ? `${uploadProgress}% hochgeladen` : "Freigabelink erstellen"}
       </button>
 
       <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />Der Link ist zufällig und wird nicht öffentlich gelistet.</p>

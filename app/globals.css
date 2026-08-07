@@ -275,6 +275,35 @@ a { color: inherit; text-decoration: none; }
 .settings-row textarea::placeholder { color: #aaa7b0; }
 .form-error { margin: -7px 0 12px; color: #a72f3d; font-size: 12px; line-height: 1.4; }
 
+.upload-progress { margin: -3px 0 14px; }
+.upload-progress-heading {
+  margin-bottom: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #765543;
+  font-size: 11px;
+  font-weight: 650;
+}
+.upload-progress-heading strong {
+  color: var(--violet-dark);
+  font-variant-numeric: tabular-nums;
+}
+.upload-progress-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f2dfcc;
+}
+.upload-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f3ab24, #d95d1d 70%, #a83e18);
+  box-shadow: 0 0 12px rgba(217, 93, 29, 0.3);
+  transition: width 180ms ease;
+}
+
 .primary-button {
   width: 100%;
   min-height: 49px;
