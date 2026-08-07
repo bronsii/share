@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 import { TransferPanel } from "./transfer-panel";
 
 export default function Home() {
@@ -14,9 +13,6 @@ export default function Home() {
             <span className="brand-mark">b</span>
             <span className="brand-name">share.</span>
           </Link>
-          <a className="external-link compact-external" href="https://bronsinger.de">
-            bronsinger.de <ArrowUpRight size={15} aria-hidden="true" />
-          </a>
         </header>
 
         <div className="hero-grid compact-grid">
@@ -26,7 +22,7 @@ export default function Home() {
               Hochladen.
               <span>Link teilen.</span>
             </h1>
-            <p className="hero-lead">Bis 100 MB. Ohne Konto.</p>
+            <p className="hero-lead">Bis 15 GB. Ohne Registrierung.</p>
           </div>
           <TransferPanel />
         </div>

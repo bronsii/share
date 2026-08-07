@@ -1,6 +1,6 @@
 import "server-only";
 
-import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type TransferFile = {
@@ -24,6 +24,9 @@ const SHARED_ROOT = "C:\\apps\\share\\shared";
 const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
 const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;
+const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
+
+export class InsufficientStorageError extends Error {}
 
 function transferFolder(folderName: string) {
   if (!FOLDER_PATTERN.test(folderName)) throw new Error("Ungültiger Übertragungsordner.");
@@ -64,21 +67,18 @@ export function sanitizeFileName(name: string) {
   return (baseName || "Datei").slice(0, 180);
 }
 
-export function uniqueStoredNames(files: File[]) {
-  const used = new Set<string>();
-  return files.map((file) => {
-    const sanitized = sanitizeFileName(file.name);
-    const extension = path.extname(sanitized);
-    const stem = path.basename(sanitized, extension);
-    let candidate = sanitized;
-    let counter = 2;
-    while (used.has(candidate.toLocaleLowerCase("de-DE"))) {
-      candidate = `${stem} (${counter})${extension}`;
-      counter += 1;
-    }
-    used.add(candidate.toLocaleLowerCase("de-DE"));
-    return candidate;
-  });
+export function uniqueStoredName(name: string, used: Set<string>) {
+  const sanitized = sanitizeFileName(name);
+  const extension = path.extname(sanitized);
+  const stem = path.basename(sanitized, extension);
+  let candidate = sanitized;
+  let counter = 2;
+  while (used.has(candidate.toLocaleLowerCase("de-DE"))) {
+    candidate = `${stem} (${counter})${extension}`;
+    counter += 1;
+  }
+  used.add(candidate.toLocaleLowerCase("de-DE"));
+  return candidate;
 }
 
 export async function getTransfer(id: string): Promise<TransferManifest | null> {
@@ -92,23 +92,36 @@ export async function getTransfer(id: string): Promise<TransferManifest | null> 
   }
 }
 
-export async function saveTransfer(manifest: TransferManifest, files: File[]) {
+export async function ensureStorageCapacity(requiredBytes: number) {
   await mkdir(SHARED_ROOT, { recursive: true });
-  const folder = transferFolder(manifest.folderName);
-  await mkdir(folder, { recursive: false });
-  try {
-    for (let index = 0; index < files.length; index += 1) {
-      const bytes = Buffer.from(await files[index].arrayBuffer());
-      await writeFile(path.join(folder, manifest.files[index].storedName), bytes, { flag: "wx" });
-    }
-    const finalManifestPath = manifestPath(manifest.folderName);
-    const temporaryManifestPath = `${finalManifestPath}.tmp`;
-    await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx" });
-    await rename(temporaryManifestPath, finalManifestPath);
-  } catch (error) {
-    await rm(folder, { recursive: true, force: true });
-    throw error;
+  const fileSystem = await statfs(SHARED_ROOT);
+  const availableBytes = fileSystem.bavail * fileSystem.bsize;
+  if (availableBytes < requiredBytes + STORAGE_RESERVE_BYTES) {
+    throw new InsufficientStorageError("Auf der VPS ist nicht genug freier Speicher für diese Übertragung.");
   }
+}
+
+export async function prepareTransferFolder(folderName: string) {
+  await mkdir(SHARED_ROOT, { recursive: true });
+  const folder = transferFolder(folderName);
+  await mkdir(folder, { recursive: false });
+  return folder;
+}
+
+export function storedFilePath(folderName: string, storedName: string) {
+  if (sanitizeFileName(storedName) !== storedName) throw new Error("Ungültiger Dateiname.");
+  return path.join(transferFolder(folderName), storedName);
+}
+
+export async function writeTransferManifest(manifest: TransferManifest) {
+  const finalManifestPath = manifestPath(manifest.folderName);
+  const temporaryManifestPath = `${finalManifestPath}.tmp`;
+  await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx" });
+  await rename(temporaryManifestPath, finalManifestPath);
+}
+
+export async function removeTransferFolder(folderName: string) {
+  await rm(transferFolder(folderName), { recursive: true, force: true });
 }
 
 export async function getStoredFile(transferId: string, fileId: string) {

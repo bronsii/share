@@ -17,7 +17,7 @@ import {
 import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
 
 const MAX_FILES = 20;
-const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
+const MAX_TOTAL_SIZE = 15 * 1024 ** 3;
 
 type UploadResult = {
   id: string;
@@ -28,6 +28,7 @@ type UploadResult = {
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} GB`;
   return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
 }
 
@@ -67,7 +68,7 @@ export function TransferPanel() {
       if (current.length + unique.length > MAX_FILES) {
         setError(`Du kannst höchstens ${MAX_FILES} Dateien auf einmal teilen.`);
       } else if (size > MAX_TOTAL_SIZE) {
-        setError("Die Übertragung darf insgesamt höchstens 100 MB groß sein.");
+        setError("Die Übertragung darf insgesamt höchstens 15 GB groß sein.");
         return current;
       }
       return next;
@@ -168,7 +169,7 @@ export function TransferPanel() {
           <p className="panel-kicker">Neue Übertragung</p>
           <h2 id="transfer-title">Was möchtest du teilen?</h2>
         </div>
-        <div className="limit-pill">max. 100 MB</div>
+        <div className="limit-pill">max. 15 GB</div>
       </div>
 
       <input ref={inputRef} className="sr-only" type="file" multiple onChange={onFilesSelected} aria-label="Dateien auswählen" />
