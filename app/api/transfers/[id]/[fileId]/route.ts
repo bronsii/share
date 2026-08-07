@@ -1,6 +1,9 @@
 import { deleteTransfer, getStoredFile, getTransfer } from "@/lib/storage";
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function safeDisposition(name: string) {
   const fallback = name.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
@@ -19,7 +22,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!file) return new Response("Datei nicht gefunden.", { status: 404 });
   const object = await getStoredFile(id, fileId);
   if (!object) return new Response("Datei nicht gefunden.", { status: 404 });
-  return new Response(object.body, {
+  const body = Readable.toWeb(createReadStream(object.path)) as ReadableStream<Uint8Array>;
+  return new Response(body, {
     headers: {
       "Content-Type": file.type || "application/octet-stream",
       "Content-Length": String(object.size),

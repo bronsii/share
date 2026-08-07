@@ -1,69 +1,150 @@
-import { env } from "cloudflare:workers";
+import "server-only";
 
-export type TransferFile = { id: string; name: string; size: number; type: string };
+import { access, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+export type TransferFile = {
+  id: string;
+  name: string;
+  storedName: string;
+  size: number;
+  type: string;
+};
+
 export type TransferManifest = {
   id: string;
+  folderName: string;
   createdAt: string;
   expiresAt: string;
   message: string;
   files: TransferFile[];
 };
 
-type StoredObject = { body: ReadableStream<Uint8Array>; size: number; text(): Promise<string> };
-type Bucket = {
-  put(key: string, value: ReadableStream | string, options?: {
-    httpMetadata?: { contentType?: string; contentDisposition?: string };
-    customMetadata?: Record<string, string>;
-  }): Promise<unknown>;
-  get(key: string): Promise<StoredObject | null>;
-  delete(keys: string | string[]): Promise<void>;
-};
+const SHARED_ROOT = "C:\\apps\\share\\shared";
+const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
+const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
+const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;
 
-function bucket() {
-  const runtime = env as unknown as { SHARE_FILES?: Bucket };
-  if (!runtime.SHARE_FILES) throw new Error("Der Dateispeicher ist derzeit nicht verfügbar.");
-  return runtime.SHARE_FILES;
+function transferFolder(folderName: string) {
+  if (!FOLDER_PATTERN.test(folderName)) throw new Error("Ungültiger Übertragungsordner.");
+  return path.join(SHARED_ROOT, folderName);
 }
 
-export function manifestKey(id: string) { return `manifests/${id}.json`; }
-export function fileKey(transferId: string, fileId: string) { return `transfers/${transferId}/${fileId}`; }
-export function transferIsExpired(manifest: TransferManifest) {
-  return new Date(manifest.expiresAt).getTime() <= Date.now();
+function manifestPath(folderName: string) {
+  return path.join(transferFolder(folderName), "manifest.json");
+}
+
+export function createFolderName(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "00";
+  return `${value("year")}-${value("month")}-${value("day")}_${value("hour")}-${value("minute")}-${value("second")}-${String(date.getMilliseconds()).padStart(3, "0")}`;
+}
+
+export function createTransferId(folderName: string) {
+  return `${folderName}--${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`;
+}
+
+export function sanitizeFileName(name: string) {
+  const withoutControlCharacters = Array.from(path.basename(name), (character) =>
+    character.charCodeAt(0) < 32 ? "_" : character,
+  ).join("");
+  const baseName = withoutControlCharacters
+    .replace(/[<>:"/\\|?*]/g, "_")
+    .replace(/[. ]+$/g, "")
+    .trim();
+  return (baseName || "Datei").slice(0, 180);
+}
+
+export function uniqueStoredNames(files: File[]) {
+  const used = new Set<string>();
+  return files.map((file) => {
+    const sanitized = sanitizeFileName(file.name);
+    const extension = path.extname(sanitized);
+    const stem = path.basename(sanitized, extension);
+    let candidate = sanitized;
+    let counter = 2;
+    while (used.has(candidate.toLocaleLowerCase("de-DE"))) {
+      candidate = `${stem} (${counter})${extension}`;
+      counter += 1;
+    }
+    used.add(candidate.toLocaleLowerCase("de-DE"));
+    return candidate;
+  });
 }
 
 export async function getTransfer(id: string): Promise<TransferManifest | null> {
-  if (!/^[a-zA-Z0-9_-]{12,32}$/.test(id)) return null;
-  const object = await bucket().get(manifestKey(id));
-  if (!object) return null;
-  try { return JSON.parse(await object.text()) as TransferManifest; } catch { return null; }
+  const idMatch = TRANSFER_ID_PATTERN.exec(id);
+  if (!idMatch) return null;
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath(idMatch[1]), "utf8")) as TransferManifest;
+    return manifest.id === id ? manifest : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function saveTransfer(manifest: TransferManifest, files: File[]) {
-  const storage = bucket();
-  const writtenKeys: string[] = [];
+  await mkdir(SHARED_ROOT, { recursive: true });
+  const folder = transferFolder(manifest.folderName);
+  await mkdir(folder, { recursive: false });
   try {
     for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      const record = manifest.files[index];
-      const key = fileKey(manifest.id, record.id);
-      await storage.put(key, file.stream(), {
-        httpMetadata: { contentType: record.type || "application/octet-stream" },
-        customMetadata: { transferId: manifest.id, originalName: record.name, expiresAt: manifest.expiresAt },
-      });
-      writtenKeys.push(key);
+      const bytes = Buffer.from(await files[index].arrayBuffer());
+      await writeFile(path.join(folder, manifest.files[index].storedName), bytes, { flag: "wx" });
     }
-    await storage.put(manifestKey(manifest.id), JSON.stringify(manifest), {
-      httpMetadata: { contentType: "application/json; charset=utf-8" },
-      customMetadata: { expiresAt: manifest.expiresAt },
-    });
+    const finalManifestPath = manifestPath(manifest.folderName);
+    const temporaryManifestPath = `${finalManifestPath}.tmp`;
+    await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx" });
+    await rename(temporaryManifestPath, finalManifestPath);
   } catch (error) {
-    if (writtenKeys.length) await storage.delete(writtenKeys);
+    await rm(folder, { recursive: true, force: true });
     throw error;
   }
 }
 
-export async function getStoredFile(transferId: string, fileId: string) { return bucket().get(fileKey(transferId, fileId)); }
+export async function getStoredFile(transferId: string, fileId: string) {
+  if (!FILE_ID_PATTERN.test(fileId)) return null;
+  const manifest = await getTransfer(transferId);
+  if (!manifest) return null;
+  const file = manifest.files.find((item) => item.id === fileId);
+  if (!file) return null;
+  const filePath = path.join(transferFolder(manifest.folderName), file.storedName);
+  try {
+    const fileStat = await stat(filePath);
+    return { path: filePath, size: fileStat.size };
+  } catch {
+    return null;
+  }
+}
+
+export function transferIsExpired(manifest: TransferManifest) {
+  return new Date(manifest.expiresAt).getTime() <= Date.now();
+}
+
 export async function deleteTransfer(manifest: TransferManifest) {
-  const keys = [manifestKey(manifest.id), ...manifest.files.map((file) => fileKey(manifest.id, file.id))];
-  await bucket().delete(keys);
+  await rm(transferFolder(manifest.folderName), { recursive: true, force: true });
+}
+
+export async function cleanupExpiredTransfers() {
+  await mkdir(SHARED_ROOT, { recursive: true });
+  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !FOLDER_PATTERN.test(entry.name)) continue;
+    try {
+      await access(manifestPath(entry.name));
+      const manifest = JSON.parse(await readFile(manifestPath(entry.name), "utf8")) as TransferManifest;
+      if (transferIsExpired(manifest)) await deleteTransfer(manifest);
+    } catch {
+      // Unvollständige oder manuell angelegte Ordner bleiben unangetastet.
+    }
+  }
 }
