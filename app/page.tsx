@@ -22,7 +22,7 @@ export default function Home() {
               Hochladen.
               <span>Link teilen.</span>
             </h1>
-            <p className="hero-lead">Bis 15 GB. Ohne Registrierung. Free.</p>
+            <p className="hero-lead">max. 15 GB. ohne registrierung. 100% free.</p>
           </div>
           <TransferPanel />
         </div>
