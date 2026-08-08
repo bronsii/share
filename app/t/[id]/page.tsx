@@ -26,11 +26,10 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
       <main className="download-page">
         <div className="download-ambient" />
         <section className="empty-transfer-card">
-          <Link className="brand centered-brand" href="/"><span className="brand-name">sendebude.de</span></Link>
           <div className="empty-clock"><Clock3 size={28} /></div>
           <h1>{expired ? "Dieser Link ist abgelaufen." : "Link nicht gefunden."}</h1>
           <p>{expired ? "Die Laufzeit dieser Übertragung ist beendet. Bitte die sendende Person um einen neuen Link." : "Prüfe den Link oder bitte die sendende Person, ihn noch einmal zu teilen."}</p>
-          <Link className="primary-button as-link" href="/"><ArrowLeft size={18} /> Eigene Dateien teilen</Link>
+          <Link className="primary-button as-link" href="/"><ArrowLeft size={18} /> Zur Startseite</Link>
         </section>
       </main>
     );
@@ -41,8 +40,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
     <main className="download-page">
       <div className="download-ambient" />
       <header className="download-header">
-        <Link className="brand" href="/"><span className="brand-name">sendebude.de</span></Link>
-        <Link className="back-link" href="/"><ArrowLeft size={16} /> Eigene Dateien teilen</Link>
+        <Link className="back-link" href="/"><ArrowLeft size={16} /> Zur Startseite</Link>
       </header>
       <section className="download-card">
         <div className="download-title-row">
