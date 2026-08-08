@@ -10,8 +10,7 @@ export default function Home() {
 
         <header className="site-header">
           <Link className="brand" href="/" aria-label="Share Startseite">
-            <span className="brand-mark">b</span>
-            <span className="brand-name">share.</span>
+            <span className="brand-name">sendebude.de</span>
           </Link>
         </header>
 
