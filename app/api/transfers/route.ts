@@ -102,11 +102,11 @@ async function receiveUpload(request: Request, folderName: string) {
       record.size += chunk.length;
       totalSize += chunk.length;
       if (totalSize > MAX_TOTAL_SIZE) {
-        uploadProblem ??= new UploadError("Die Übertragung darf insgesamt höchstens 15 GB groß sein.", 413);
+        uploadProblem ??= new UploadError("Die Übertragung darf insgesamt höchstens 15GB groß sein.", 413);
       }
     });
     stream.on("limit", () => {
-      uploadProblem ??= new UploadError("Die Übertragung darf insgesamt höchstens 15 GB groß sein.", 413);
+      uploadProblem ??= new UploadError("Die Übertragung darf insgesamt höchstens 15GB groß sein.", 413);
     });
 
     const write = pipeline(
@@ -138,7 +138,7 @@ async function receiveUpload(request: Request, folderName: string) {
 
   if (uploadProblem) throw uploadProblem;
   if (!files.length) throw new UploadError("Bitte wähle mindestens eine Datei aus.", 400);
-  if (totalSize > MAX_TOTAL_SIZE) throw new UploadError("Die Übertragung darf insgesamt höchstens 15 GB groß sein.", 413);
+  if (totalSize > MAX_TOTAL_SIZE) throw new UploadError("Die Übertragung darf insgesamt höchstens 15GB groß sein.", 413);
 
   return {
     files,
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Der Browser hat keine Uploadgröße übermittelt." }, { status: 411 });
   }
   if (contentLength > MAX_TOTAL_SIZE + MULTIPART_OVERHEAD) {
-    return NextResponse.json({ error: "Die Übertragung darf insgesamt höchstens 15 GB groß sein." }, { status: 413 });
+    return NextResponse.json({ error: "Die Übertragung darf insgesamt höchstens 15GB groß sein." }, { status: 413 });
   }
 
   const now = new Date();
