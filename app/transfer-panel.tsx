@@ -238,8 +238,8 @@ export function TransferPanel() {
           </span>
         </label>
         <label>
-          <span>Nachricht <em>optional</em></span>
-          <textarea maxLength={500} rows={2} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ein kurzer Hinweis …" />
+          <span>Notiz <em>optional</em></span>
+          <textarea maxLength={500} rows={2} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="z. b. hier sind die urlaubsfotos …" />
         </label>
       </div>
 
@@ -266,7 +266,7 @@ export function TransferPanel() {
 
       <button className="primary-button" type="button" disabled={!files.length || uploading} onClick={createTransfer}>
         {uploading ? <LoaderCircle className="spinner" size={19} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
-        {uploading ? `${uploadProgress}% hochgeladen` : "Freigabelink erstellen"}
+        {uploading ? `${uploadProgress}% hochgeladen` : "Freigabelink teilen"}
       </button>
 
       <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />Der Link ist zufällig und wird nicht öffentlich gelistet.</p>

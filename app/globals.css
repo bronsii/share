@@ -18,7 +18,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: "Courier New", Courier, monospace;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -129,7 +129,7 @@ a { color: inherit; text-decoration: none; }
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.13em;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 .eyebrow {
   display: inline-flex;
@@ -331,7 +331,7 @@ a { color: inherit; text-decoration: none; }
   color: rgba(255,255,255,0.35);
   font-size: 10px;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 .hero-note-line { width: 36px; height: 1px; background: rgba(255,255,255,0.2); }
 
@@ -411,7 +411,7 @@ a { color: inherit; text-decoration: none; }
 .download-title-row h1 { margin: 0; font-size: clamp(27px, 4vw, 37px); letter-spacing: -0.05em; }
 .download-total { flex: 0 0 auto; padding-top: 5px; text-align: right; }
 .download-total span, .download-total strong { display: block; }
-.download-total span { margin-bottom: 3px; color: #98959e; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+.download-total span { margin-bottom: 3px; color: #98959e; font-size: 10px; text-transform: lowercase; letter-spacing: 0.1em; }
 .download-total strong { font-size: 14px; }
 .sender-message { margin: 27px 0 0; padding: 16px 18px; border-left: 3px solid #dd6b20; border-radius: 0 10px 10px 0; color: #684839; background: #fff2e2; font-size: 13px; line-height: 1.55; }
 .download-file-list { margin-top: 28px; border-top: 1px solid #e9e8ee; }
