@@ -245,10 +245,16 @@ export function TransferPanel() {
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
-      {uploading && (
+      {files.length > 0 && (
         <div className="upload-progress" aria-live="polite">
           <div className="upload-progress-heading">
-            <span>{uploadProgress < 100 ? "Upload läuft" : "Upload wird abgeschlossen"}</span>
+            <span>
+              {!uploading
+                ? "Upload bereit"
+                : uploadProgress < 100
+                  ? "Upload läuft"
+                  : "Upload wird abgeschlossen"}
+            </span>
             <strong>{uploadProgress}%</strong>
           </div>
           <div
