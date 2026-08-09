@@ -35,7 +35,13 @@ export async function POST(request: Request) {
     if (!Array.isArray(body.files) || body.files.length < 1 || body.files.length > MAX_FILES) {
       return NextResponse.json({ error: `Bitte w\u00e4hle zwischen 1 und ${MAX_FILES} Dateien aus.` }, { status: 400 });
     }
-    const totalSize = body.files.reduce((sum, file) => sum + (Number.isSafeInteger(file.size) && (file.size ?? -1) >= 0 ? file.size! : NaN), 0);
+    if (body.files.some((file) => !Number.isSafeInteger(file.size) || (file.size ?? 0) <= 0)) {
+      return NextResponse.json(
+        { error: "Ordner oder leere Dateien können nicht hochgeladen werden. Bitte wähle einzelne Dateien oder eine ZIP-Datei." },
+        { status: 400 },
+      );
+    }
+    const totalSize = body.files.reduce((sum, file) => sum + file.size!, 0);
     if (!Number.isSafeInteger(totalSize) || totalSize > MAX_TOTAL_SIZE) {
       return NextResponse.json({ error: "Die \u00dcbertragung darf insgesamt h\u00f6chstens 15GB gro\u00df sein." }, { status: 413 });
     }

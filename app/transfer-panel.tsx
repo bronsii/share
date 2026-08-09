@@ -26,6 +26,7 @@ const translations = {
   de: {
     tooManyFiles: (maximum: number) => `Du kannst höchstens ${maximum} Dateien auf einmal teilen.`,
     tooLarge: "Die Übertragung darf insgesamt höchstens 15 GB groß sein.",
+    emptyOrFolder: "Ordner oder leere Dateien können nicht hochgeladen werden. Bitte wähle einzelne Dateien oder packe den Ordner als ZIP-Datei.",
     uploadFailed: "Die Übertragung konnte nicht erstellt werden.",
     connectionLost: "Die Verbindung wurde beim Hochladen unterbrochen.",
     uploadAborted: "Der Upload wurde abgebrochen.",
@@ -67,6 +68,7 @@ const translations = {
   en: {
     tooManyFiles: (maximum: number) => `You can share up to ${maximum} files at once.`,
     tooLarge: "The transfer may not exceed 15 GB in total.",
+    emptyOrFolder: "Folders or empty files cannot be uploaded. Please choose individual files or create a ZIP archive first.",
     uploadFailed: "The transfer could not be created.",
     connectionLost: "The connection was interrupted during upload.",
     uploadAborted: "The upload was cancelled.",
@@ -172,6 +174,10 @@ export function TransferPanel({ language }: { language: Language }) {
     if (uploadingRef.current) return;
     setError("");
     setResult(null);
+    if (incoming.some((file) => file.size === 0)) {
+      setError(text.emptyOrFolder);
+      return;
+    }
     const known = new Set(files.map(fileKey));
     const unique = incoming.filter((file) => !known.has(fileKey(file)));
     const next = [...files, ...unique];
