@@ -20,6 +20,8 @@ export type TransferManifest = {
   files: TransferFile[];
 };
 
+export type UploadSession = TransferManifest;
+
 const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
 const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
@@ -35,6 +37,10 @@ function transferFolder(folderName: string) {
 
 function manifestPath(folderName: string) {
   return path.join(transferFolder(folderName), "manifest.json");
+}
+
+function uploadSessionPath(folderName: string) {
+  return path.join(transferFolder(folderName), "upload.json");
 }
 
 export function createFolderName(date = new Date()) {
@@ -90,6 +96,56 @@ export async function getTransfer(id: string): Promise<TransferManifest | null> 
   } catch {
     return null;
   }
+}
+
+export async function getUploadSession(id: string): Promise<UploadSession | null> {
+  const idMatch = TRANSFER_ID_PATTERN.exec(id);
+  if (!idMatch) return null;
+  try {
+    const session = JSON.parse(await readFile(uploadSessionPath(idMatch[1]), "utf8")) as UploadSession;
+    return session.id === id ? session : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeUploadSession(session: UploadSession) {
+  await writeFile(uploadSessionPath(session.folderName), JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx" });
+}
+
+export async function getUploadFile(transferId: string, fileId: string) {
+  if (!FILE_ID_PATTERN.test(fileId)) return null;
+  const session = await getUploadSession(transferId);
+  if (!session) return null;
+  const file = session.files.find((item) => item.id === fileId);
+  if (!file) return null;
+  const filePath = storedFilePath(session.folderName, file.storedName);
+  let uploaded = 0;
+  try {
+    uploaded = (await stat(filePath)).size;
+  } catch {
+    // Die Datei wird mit dem ersten Abschnitt angelegt.
+  }
+  return { session, file, path: filePath, uploaded };
+}
+
+export async function getUploadProgress(session: UploadSession) {
+  return Promise.all(session.files.map(async (file) => {
+    try {
+      return { id: file.id, uploaded: (await stat(storedFilePath(session.folderName, file.storedName))).size };
+    } catch {
+      return { id: file.id, uploaded: 0 };
+    }
+  }));
+}
+
+export async function finishUploadSession(session: UploadSession) {
+  const progress = await getUploadProgress(session);
+  if (progress.some((item, index) => item.uploaded !== session.files[index].size)) {
+    throw new Error("Der Upload ist noch nicht vollst\u00e4ndig.");
+  }
+  await writeTransferManifest(session);
+  await rm(uploadSessionPath(session.folderName), { force: true });
 }
 
 export async function ensureStorageCapacity(requiredBytes: number) {
