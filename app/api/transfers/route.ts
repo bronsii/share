@@ -68,7 +68,7 @@ async function receiveUpload(request: Request, folderName: string) {
   const writes: Promise<void>[] = [];
   const usedNames = new Set<string>();
   let totalSize = 0;
-  let requestedDays = 7;
+  let requestedDays = 3;
   let message = "";
   let uploadProblem: UploadError | null = null;
 
@@ -142,7 +142,7 @@ async function receiveUpload(request: Request, folderName: string) {
 
   return {
     files,
-    days: ALLOWED_DAYS.has(requestedDays) ? requestedDays : 7,
+    days: ALLOWED_DAYS.has(requestedDays) ? requestedDays : 3,
     message,
   };
 }

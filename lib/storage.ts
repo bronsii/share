@@ -20,7 +20,7 @@ export type TransferManifest = {
   files: TransferFile[];
 };
 
-const SHARED_ROOT = "C:\\apps\\share\\shared";
+const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
 const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
 const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;

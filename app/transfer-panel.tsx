@@ -48,7 +48,7 @@ export function TransferPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [days, setDays] = useState("7");
+  const [days, setDays] = useState("3");
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
