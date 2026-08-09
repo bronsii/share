@@ -330,9 +330,9 @@ export function TransferPanel({ language }: { language: Language }) {
             const fileProgress = file.size ? Math.min(100, Math.round((fileUploadedBytes / file.size) * 100)) : 100;
             return (
               <div className="file-row" key={fileKey(file)}>
-                <span className="file-progress" aria-label={`${fileProgress}% ${text.uploaded}`}>{fileProgress}%</span>
                 <span className="file-glyph" aria-hidden="true"><FileGlyph file={file} /></span>
                 <span className="file-name" title={file.name}>{file.name}</span>
+                <span className="file-progress" aria-label={`${fileProgress}% ${text.uploaded}`}>{fileProgress}%</span>
                 <span className="file-size"><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</span>
                 <button type="button" disabled={uploading} onClick={() => setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={`${file.name} ${text.remove}`}><Trash2 size={16} /></button>
               </div>
