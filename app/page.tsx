@@ -12,7 +12,7 @@ const heroCopy = {
   },
   en: {
     firstLine: "Upload.",
-    secondLine: "Share the link.",
+    secondLine: "Share.",
     lead: "100% free. no registration. max. 15 GB.",
     languageLabel: "Choose language",
   },
