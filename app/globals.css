@@ -306,6 +306,8 @@ a { color: inherit; text-decoration: none; }
   transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
 .primary-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(185, 67, 20, 0.4); }
+.primary-button.is-cancel { background: linear-gradient(135deg, #bd4a32, #963222); }
+.primary-button.is-cancel:hover:not(:disabled) { box-shadow: 0 12px 28px rgba(130, 40, 26, 0.38); }
 .primary-button:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 .primary-button:focus-visible, .text-button:focus-visible, .share-link-row button:focus-visible, .share-link-row .share-link:focus-visible, .download-file a:focus-visible {
   outline: 3px solid rgba(243, 171, 36, 0.42);

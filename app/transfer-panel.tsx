@@ -7,12 +7,12 @@ import {
   FileArchive,
   FileImage,
   FileText,
-  LoaderCircle,
   Plus,
   Send,
   ShieldCheck,
   Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
 
@@ -56,7 +56,7 @@ const translations = {
     note: "Notiz",
     optional: "optional",
     placeholder: "z. B. hier sind die Urlaubsfotos …",
-    uploading: "Upload läuft …",
+    cancelUpload: "Upload abbrechen",
     privacy: "Der Link ist zufällig und wird nicht öffentlich gelistet.",
     locale: "de-DE",
   },
@@ -94,7 +94,7 @@ const translations = {
     note: "Note",
     optional: "optional",
     placeholder: "e.g. here are the holiday photos …",
-    uploading: "Uploading …",
+    cancelUpload: "Cancel upload",
     privacy: "The link is random and is not listed publicly.",
     locale: "en-GB",
   },
@@ -129,6 +129,7 @@ export function TransferPanel({ language }: { language: Language }) {
   const text = translations[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
+  const requestRef = useRef<XMLHttpRequest | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [days, setDays] = useState("3");
   const [message, setMessage] = useState("");
@@ -198,6 +199,7 @@ export function TransferPanel({ language }: { language: Language }) {
       body.append("message", message.trim());
       const payload = await new Promise<UploadResult>((resolve, reject) => {
         const request = new XMLHttpRequest();
+        requestRef.current = request;
         request.open("POST", "/api/transfers");
         request.responseType = "json";
         request.upload.addEventListener("progress", (event) => {
@@ -223,9 +225,14 @@ export function TransferPanel({ language }: { language: Language }) {
       setUploadedBytes(0);
       setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
     } finally {
+      requestRef.current = null;
       uploadingRef.current = false;
       setUploading(false);
     }
+  }
+
+  function cancelUpload() {
+    requestRef.current?.abort();
   }
 
   async function copyLink() {
@@ -359,9 +366,14 @@ export function TransferPanel({ language }: { language: Language }) {
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
-      <button className="primary-button" type="button" disabled={!files.length || uploading} onClick={() => void createTransfer(files)}>
-        {uploading ? <LoaderCircle className="spinner" size={19} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
-        {uploading ? text.uploading : text.shareLink}
+      <button
+        className={`primary-button ${uploading ? "is-cancel" : ""}`}
+        type="button"
+        disabled={!files.length}
+        onClick={() => uploading ? cancelUpload() : void createTransfer(files)}
+      >
+        {uploading ? <X size={19} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
+        {uploading ? text.cancelUpload : text.shareLink}
       </button>
 
       <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />{text.privacy}</p>

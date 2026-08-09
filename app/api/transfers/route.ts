@@ -127,11 +127,27 @@ async function receiveUpload(request: Request, folderName: string) {
     uploadProblem ??= new UploadError("Der Upload enthält zu viele Bestandteile.", 400);
   });
 
+  const body = Readable.fromWeb(request.body as Parameters<typeof Readable.fromWeb>[0]);
   await new Promise<void>((resolve, reject) => {
-    parser.once("close", resolve);
-    parser.once("error", (error) => reject(error));
-    const body = Readable.fromWeb(request.body as Parameters<typeof Readable.fromWeb>[0]);
-    body.once("error", reject);
+    const finish = (callback: () => void) => {
+      request.signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () => {
+      const error = new UploadError("Der Upload wurde abgebrochen.", 499);
+      body.destroy(error);
+      parser.destroy(error);
+      finish(() => reject(error));
+    };
+
+    parser.once("close", () => finish(resolve));
+    parser.once("error", (error) => finish(() => reject(error)));
+    body.once("error", (error) => finish(() => reject(error)));
+    request.signal.addEventListener("abort", onAbort, { once: true });
+    if (request.signal.aborted) {
+      onAbort();
+      return;
+    }
     body.pipe(parser);
   });
   await Promise.all(writes);
