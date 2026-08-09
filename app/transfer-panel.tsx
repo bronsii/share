@@ -458,7 +458,7 @@ export function TransferPanel({ language }: { language: Language }) {
                 <span className="file-actions">
                   {isCurrentUpload && (
                     <button className="pause-button" type="button" onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
-                      {paused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
+                      {paused ? <Play size={16} /> : <Pause size={16} />}
                     </button>
                   )}
                   <button type="button" onClick={() => uploading ? void cancelUpload() : setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={uploading ? text.cancelUpload : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
