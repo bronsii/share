@@ -49,6 +49,7 @@ const translations = {
     clickToChoose: "oder klicken, um auszuwählen",
     selectedFiles: "Ausgewählte Dateien",
     uploaded: "hochgeladen",
+    perSecond: "pro Sekunde",
     remove: "entfernen",
     validFor: "Link gültig für",
     day: "Tag",
@@ -87,6 +88,7 @@ const translations = {
     clickToChoose: "or click to choose",
     selectedFiles: "Selected files",
     uploaded: "uploaded",
+    perSecond: "per second",
     remove: "remove",
     validFor: "Link valid for",
     day: "day",
@@ -130,12 +132,14 @@ export function TransferPanel({ language }: { language: Language }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
   const requestRef = useRef<XMLHttpRequest | null>(null);
+  const uploadStartedAtRef = useRef(0);
   const [files, setFiles] = useState<File[]>([]);
   const [days, setDays] = useState("3");
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadedBytes, setUploadedBytes] = useState(0);
+  const [uploadSpeed, setUploadSpeed] = useState(0);
   const [error, setError] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [copied, setCopied] = useState(false);
@@ -191,6 +195,8 @@ export function TransferPanel({ language }: { language: Language }) {
     uploadingRef.current = true;
     setUploading(true);
     setUploadedBytes(0);
+    setUploadSpeed(0);
+    uploadStartedAtRef.current = performance.now();
     setError("");
     try {
       const body = new FormData();
@@ -205,6 +211,8 @@ export function TransferPanel({ language }: { language: Language }) {
         request.upload.addEventListener("progress", (event) => {
           if (!event.lengthComputable) return;
           setUploadedBytes(Math.min(event.loaded, uploadFiles.reduce((sum, file) => sum + file.size, 0)));
+          const elapsedSeconds = (performance.now() - uploadStartedAtRef.current) / 1000;
+          if (elapsedSeconds > 0) setUploadSpeed(event.loaded / elapsedSeconds);
         });
         request.addEventListener("load", () => {
           const response = request.response as (UploadResult & { error?: string }) | null;
@@ -223,6 +231,7 @@ export function TransferPanel({ language }: { language: Language }) {
       setCopied(false);
     } catch (uploadError) {
       setUploadedBytes(0);
+      setUploadSpeed(0);
       setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
     } finally {
       requestRef.current = null;
@@ -265,6 +274,7 @@ export function TransferPanel({ language }: { language: Language }) {
     setResult(null);
     setCopied(false);
     setUploadedBytes(0);
+    setUploadSpeed(0);
     uploadingRef.current = false;
     setError("");
   }
@@ -333,13 +343,18 @@ export function TransferPanel({ language }: { language: Language }) {
         <div className="file-list" aria-label={text.selectedFiles}>
           <div className="file-list-heading"><span>{files.length} {files.length === 1 ? text.file : text.files}</span><span>{formatBytes(totalSize)}</span></div>
           {files.map((file, index) => {
+            const previousBytes = files.slice(0, index).reduce((sum, item) => sum + item.size, 0);
             const fileUploadedBytes = uploadedBytesForFile(index);
             const fileProgress = file.size ? Math.min(100, Math.round((fileUploadedBytes / file.size) * 100)) : 100;
+            const isCurrentUpload = uploading && uploadedBytes >= previousBytes && uploadedBytes < previousBytes + file.size;
             return (
               <div className="file-row" key={fileKey(file)}>
                 <span className="file-glyph" aria-hidden="true"><FileGlyph file={file} /></span>
                 <span className="file-name" title={file.name}>{file.name}</span>
                 <span className="file-progress" aria-label={`${fileProgress}% ${text.uploaded}`}>{fileProgress}%</span>
+                <span className="file-speed" aria-label={isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)} ${text.perSecond}` : undefined}>
+                  {isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : ""}
+                </span>
                 <span className="file-size"><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</span>
                 <button type="button" disabled={uploading} onClick={() => setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={`${file.name} ${text.remove}`}><Trash2 size={16} /></button>
               </div>

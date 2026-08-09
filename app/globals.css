@@ -255,12 +255,13 @@ a { color: inherit; text-decoration: none; }
   min-height: 43px;
   border-top: 1px solid #eeeef2;
   display: grid;
-  grid-template-columns: 30px minmax(0,1fr) 42px auto 28px;
+  grid-template-columns: 30px minmax(0,1fr) 42px 72px auto 28px;
   gap: 8px;
   align-items: center;
   font-size: 12px;
 }
 .file-progress { color: var(--violet-dark); font-weight: 750; font-variant-numeric: tabular-nums; }
+.file-speed { color: #8a6351; font-size: 10px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .file-glyph { display: grid; place-items: center; color: var(--violet); }
 .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 590; }
 .file-size { color: #898691; font-size: 10.5px; white-space: nowrap; }
@@ -478,6 +479,8 @@ a { color: inherit; text-decoration: none; }
   .hero-lead { margin-block: 21px 23px; font-size: 16px; }
   .confidence-list { gap: 8px 14px; font-size: 11.5px; }
   .transfer-card { min-height: 0; padding: 21px; border-radius: 19px; }
+  .file-row { grid-template-columns: 30px minmax(0,1fr) 42px 62px 28px; }
+  .file-row .file-size { display: none; }
   .card-heading h2, .result-card h2 { font-size: 20px; }
   .dropzone { min-height: 105px; padding: 16px; }
   .dropzone-plus { display: none; }
