@@ -7,12 +7,13 @@ import {
   FileArchive,
   FileImage,
   FileText,
+  Pause,
+  Play,
   Plus,
   Send,
   ShieldCheck,
   Trash2,
   UploadCloud,
-  X,
 } from "lucide-react";
 import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
 
@@ -51,13 +52,15 @@ const translations = {
     uploaded: "hochgeladen",
     perSecond: "pro Sekunde",
     remove: "entfernen",
+    pauseUpload: "Upload pausieren",
+    resumeUpload: "Upload fortsetzen",
     validFor: "Link gültig für",
     day: "Tag",
     days: "Tage",
     note: "Notiz",
     optional: "optional",
     placeholder: "z. B. hier sind die Urlaubsfotos …",
-    cancelUpload: "Upload abbrechen",
+    cancelUpload: "Upload abbrechen und l\u00f6schen",
     privacy: "Der Link ist zufällig und wird nicht öffentlich gelistet.",
     locale: "de-DE",
   },
@@ -90,13 +93,15 @@ const translations = {
     uploaded: "uploaded",
     perSecond: "per second",
     remove: "remove",
+    pauseUpload: "Pause upload",
+    resumeUpload: "Resume upload",
     validFor: "Link valid for",
     day: "day",
     days: "days",
     note: "Note",
     optional: "optional",
     placeholder: "e.g. here are the holiday photos …",
-    cancelUpload: "Cancel upload",
+    cancelUpload: "Cancel and delete upload",
     privacy: "The link is random and is not listed publicly.",
     locale: "en-GB",
   },
@@ -107,6 +112,14 @@ type UploadResult = {
   url: string;
   expiresAt: string;
 };
+
+type UploadSession = {
+  id: string;
+  expiresAt: string;
+  files: Array<{ id: string; name: string; size: number; uploaded: number }>;
+};
+
+const CHUNK_SIZE = 4 * 1024 ** 2;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -131,13 +144,17 @@ export function TransferPanel({ language }: { language: Language }) {
   const text = translations[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
+  const pausedRef = useRef(false);
   const requestRef = useRef<XMLHttpRequest | null>(null);
-  const uploadStartedAtRef = useRef(0);
+  const sessionRef = useRef<UploadSession | null>(null);
+  const speedSampleRef = useRef({ time: 0, bytes: 0, value: 0 });
   const [files, setFiles] = useState<File[]>([]);
   const [days, setDays] = useState("3");
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [uploadedBytes, setUploadedBytes] = useState(0);
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [error, setError] = useState("");
@@ -193,55 +210,136 @@ export function TransferPanel({ language }: { language: Language }) {
   async function createTransfer(uploadFiles = files) {
     if (!uploadFiles.length || uploadingRef.current) return;
     uploadingRef.current = true;
+    pausedRef.current = false;
     setUploading(true);
+    setPaused(false);
+    setCurrentFileIndex(0);
     setUploadedBytes(0);
     setUploadSpeed(0);
-    uploadStartedAtRef.current = performance.now();
+    speedSampleRef.current = { time: performance.now(), bytes: 0, value: 0 };
     setError("");
     try {
-      const body = new FormData();
-      uploadFiles.forEach((file) => body.append("files", file));
-      body.append("days", days);
-      body.append("message", message.trim());
-      const payload = await new Promise<UploadResult>((resolve, reject) => {
-        const request = new XMLHttpRequest();
-        requestRef.current = request;
-        request.open("POST", "/api/transfers");
-        request.responseType = "json";
-        request.upload.addEventListener("progress", (event) => {
-          if (!event.lengthComputable) return;
-          setUploadedBytes(Math.min(event.loaded, uploadFiles.reduce((sum, file) => sum + file.size, 0)));
-          const elapsedSeconds = (performance.now() - uploadStartedAtRef.current) / 1000;
-          if (elapsedSeconds > 0) setUploadSpeed(event.loaded / elapsedSeconds);
-        });
-        request.addEventListener("load", () => {
-          const response = request.response as (UploadResult & { error?: string }) | null;
-          if (request.status >= 200 && request.status < 300 && response?.url) {
-            setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
-            resolve(response);
-            return;
-          }
-          reject(new Error(response?.error || text.uploadFailed));
-        });
-        request.addEventListener("error", () => reject(new Error(text.connectionLost)));
-        request.addEventListener("abort", () => reject(new Error(text.uploadAborted)));
-        request.send(body);
+      const response = await fetch("/api/uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files: uploadFiles.map((file) => ({ name: file.name, size: file.size, type: file.type })), days: Number(days), message: message.trim() }),
       });
-      setResult(payload);
-      setCopied(false);
+      const session = await response.json() as UploadSession & { error?: string };
+      if (!response.ok || !session.id) throw new Error(session.error || text.uploadFailed);
+      sessionRef.current = session;
+      await continueUpload(uploadFiles, session);
     } catch (uploadError) {
-      setUploadedBytes(0);
-      setUploadSpeed(0);
-      setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
-    } finally {
-      requestRef.current = null;
-      uploadingRef.current = false;
-      setUploading(false);
+      if (!pausedRef.current) {
+        uploadingRef.current = false;
+        setUploading(false);
+        setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
+      }
     }
   }
 
-  function cancelUpload() {
+  function updateProgress(bytes: number) {
+    setUploadedBytes(bytes);
+    const now = performance.now();
+    const sample = speedSampleRef.current;
+    const elapsed = (now - sample.time) / 1000;
+    if (elapsed < 1) return;
+    const instant = Math.max(0, bytes - sample.bytes) / elapsed;
+    const smoothed = sample.value ? sample.value * 0.7 + instant * 0.3 : instant;
+    speedSampleRef.current = { time: now, bytes, value: smoothed };
+    setUploadSpeed(smoothed);
+  }
+
+  function uploadChunk(sessionId: string, fileId: string, blob: Blob, offset: number, completedBefore: number) {
+    return new Promise<number>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      requestRef.current = request;
+      request.open("PUT", `/api/uploads/${sessionId}/${fileId}`);
+      request.responseType = "json";
+      request.setRequestHeader("X-Upload-Offset", String(offset));
+      request.upload.addEventListener("progress", (event) => updateProgress(completedBefore + offset + event.loaded));
+      request.addEventListener("load", () => {
+        const response = request.response as { uploaded?: number; error?: string } | null;
+        if (request.status >= 200 && request.status < 300 && typeof response?.uploaded === "number") resolve(response.uploaded);
+        else reject(new Error(response?.error || text.uploadFailed));
+      });
+      request.addEventListener("error", () => reject(new Error(text.connectionLost)));
+      request.addEventListener("abort", () => reject(new DOMException("Paused", "AbortError")));
+      request.send(blob);
+    });
+  }
+
+  async function continueUpload(uploadFiles = files, knownSession = sessionRef.current) {
+    if (!knownSession || pausedRef.current) return;
+    const statusResponse = await fetch(`/api/uploads/${knownSession.id}`, { cache: "no-store" });
+    const status = await statusResponse.json() as { files?: Array<{ id: string; uploaded: number }>; error?: string };
+    if (!statusResponse.ok || !status.files) throw new Error(status.error || text.uploadFailed);
+    const offsets = new Map(status.files.map((file) => [file.id, file.uploaded]));
+    let completedBefore = 0;
+    updateProgress(status.files.reduce((sum, file) => sum + file.uploaded, 0));
+    try {
+      for (let index = 0; index < uploadFiles.length; index += 1) {
+        const file = uploadFiles[index];
+        const serverFile = knownSession.files[index];
+        setCurrentFileIndex(index);
+        let offset = offsets.get(serverFile.id) ?? 0;
+        while (offset < file.size) {
+          if (pausedRef.current) return;
+          const end = Math.min(offset + CHUNK_SIZE, file.size);
+          offset = await uploadChunk(knownSession.id, serverFile.id, file.slice(offset, end), offset, completedBefore);
+          updateProgress(completedBefore + offset);
+        }
+        completedBefore += file.size;
+      }
+      const completeResponse = await fetch(`/api/uploads/${knownSession.id}/complete`, { method: "POST" });
+      const payload = await completeResponse.json() as UploadResult & { error?: string };
+      if (!completeResponse.ok || !payload.url) throw new Error(payload.error || text.uploadFailed);
+      setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
+      setUploadSpeed(0);
+      setResult(payload);
+      setCopied(false);
+      sessionRef.current = null;
+      uploadingRef.current = false;
+      setUploading(false);
+    } catch (uploadError) {
+      if (uploadError instanceof DOMException && uploadError.name === "AbortError" && pausedRef.current) return;
+      throw uploadError;
+    } finally {
+      requestRef.current = null;
+    }
+  }
+
+  function pauseUpload() {
+    pausedRef.current = true;
+    setPaused(true);
+    setUploadSpeed(0);
     requestRef.current?.abort();
+  }
+
+  function resumeUpload() {
+    if (!sessionRef.current || !pausedRef.current) return;
+    pausedRef.current = false;
+    setPaused(false);
+    speedSampleRef.current = { time: performance.now(), bytes: uploadedBytes, value: 0 };
+    void continueUpload().catch((uploadError) => {
+      uploadingRef.current = false;
+      setUploading(false);
+      setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
+    });
+  }
+
+  async function cancelUpload() {
+    pausedRef.current = true;
+    requestRef.current?.abort();
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    if (session) await fetch(`/api/uploads/${session.id}`, { method: "DELETE" }).catch(() => undefined);
+    uploadingRef.current = false;
+    setUploading(false);
+    setPaused(false);
+    setFiles([]);
+    setUploadedBytes(0);
+    setUploadSpeed(0);
+    setError("");
   }
 
   async function copyLink() {
@@ -276,6 +374,8 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploadedBytes(0);
     setUploadSpeed(0);
     uploadingRef.current = false;
+    pausedRef.current = false;
+    sessionRef.current = null;
     setError("");
   }
 
@@ -343,10 +443,9 @@ export function TransferPanel({ language }: { language: Language }) {
         <div className="file-list" aria-label={text.selectedFiles}>
           <div className="file-list-heading"><span>{files.length} {files.length === 1 ? text.file : text.files}</span><span>{formatBytes(totalSize)}</span></div>
           {files.map((file, index) => {
-            const previousBytes = files.slice(0, index).reduce((sum, item) => sum + item.size, 0);
             const fileUploadedBytes = uploadedBytesForFile(index);
             const fileProgress = file.size ? Math.min(100, Math.round((fileUploadedBytes / file.size) * 100)) : 100;
-            const isCurrentUpload = uploading && uploadedBytes >= previousBytes && uploadedBytes < previousBytes + file.size;
+            const isCurrentUpload = uploading && index === currentFileIndex;
             return (
               <div className="file-row" key={fileKey(file)}>
                 <span className="file-glyph" aria-hidden="true"><FileGlyph file={file} /></span>
@@ -356,7 +455,14 @@ export function TransferPanel({ language }: { language: Language }) {
                   {isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : ""}
                 </span>
                 <span className="file-size"><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</span>
-                <button type="button" disabled={uploading} onClick={() => setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={`${file.name} ${text.remove}`}><Trash2 size={16} /></button>
+                <span className="file-actions">
+                  {isCurrentUpload && (
+                    <button className="pause-button" type="button" onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
+                      {paused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => uploading ? void cancelUpload() : setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={uploading ? text.cancelUpload : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
+                </span>
               </div>
             );
           })}
@@ -382,13 +488,13 @@ export function TransferPanel({ language }: { language: Language }) {
       {error && <p className="form-error" role="alert">{error}</p>}
 
       <button
-        className={`primary-button ${uploading ? "is-cancel" : ""}`}
+        className="primary-button"
         type="button"
-        disabled={!files.length}
-        onClick={() => uploading ? cancelUpload() : void createTransfer(files)}
+        disabled={!files.length || uploading}
+        onClick={() => void createTransfer(files)}
       >
-        {uploading ? <X size={19} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
-        {uploading ? text.cancelUpload : text.shareLink}
+        <Send size={18} aria-hidden="true" />
+        {text.shareLink}
       </button>
 
       <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />{text.privacy}</p>
