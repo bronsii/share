@@ -87,6 +87,40 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
 }
 
+.language-switch {
+  margin-left: auto;
+  padding: 4px;
+  display: inline-flex;
+  gap: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+.language-switch button {
+  min-width: 42px;
+  height: 34px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.64);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.language-switch button:hover { color: #fff; }
+.language-switch button.is-active {
+  color: #3b2115;
+  background: #f4ad3d;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+.language-switch button:focus-visible {
+  outline: 3px solid rgba(243, 171, 36, 0.42);
+  outline-offset: 2px;
+}
+
 .main-nav {
   display: flex;
   align-items: center;

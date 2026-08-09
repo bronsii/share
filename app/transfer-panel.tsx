@@ -19,6 +19,87 @@ import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
 const MAX_FILES = 20;
 const MAX_TOTAL_SIZE = 15 * 1024 ** 3;
 
+export type Language = "de" | "en";
+
+const translations = {
+  de: {
+    tooManyFiles: (maximum: number) => `Du kannst höchstens ${maximum} Dateien auf einmal teilen.`,
+    tooLarge: "Die Übertragung darf insgesamt höchstens 15 GB groß sein.",
+    uploadFailed: "Die Übertragung konnte nicht erstellt werden.",
+    connectionLost: "Die Verbindung wurde beim Hochladen unterbrochen.",
+    uploadAborted: "Der Upload wurde abgebrochen.",
+    copyManually: "Bitte markiere den Link und kopiere ihn manuell.",
+    shareTitle: "Freigabelink",
+    ready: "Bereit zum Teilen",
+    linkReady: "Dein Link ist fertig.",
+    resultCopy: (plural: boolean) => `Jeder mit diesem Link kann die ${plural ? "Dateien" : "Datei"} bis zum Ablaufdatum herunterladen.`,
+    openLink: "Freigabelink öffnen",
+    copyLink: "Freigabelink kopieren",
+    file: "Datei",
+    files: "Dateien",
+    until: "bis",
+    linkCopied: "Link kopiert",
+    shareLink: "Freigabelink teilen",
+    newTransfer: "Neue Übertragung erstellen",
+    newTransferKicker: "Neue Übertragung",
+    question: "Was möchtest du teilen?",
+    chooseFiles: "Dateien auswählen",
+    dropLabel: "Dateien hier ablegen oder auswählen",
+    dropFiles: "Dateien hier ablegen",
+    clickToChoose: "oder klicken, um auszuwählen",
+    selectedFiles: "Ausgewählte Dateien",
+    uploaded: "hochgeladen",
+    remove: "entfernen",
+    validFor: "Link gültig für",
+    day: "Tag",
+    days: "Tage",
+    note: "Notiz",
+    optional: "optional",
+    placeholder: "z. B. hier sind die Urlaubsfotos …",
+    uploading: "Upload läuft …",
+    privacy: "Der Link ist zufällig und wird nicht öffentlich gelistet.",
+    locale: "de-DE",
+  },
+  en: {
+    tooManyFiles: (maximum: number) => `You can share up to ${maximum} files at once.`,
+    tooLarge: "The transfer may not exceed 15 GB in total.",
+    uploadFailed: "The transfer could not be created.",
+    connectionLost: "The connection was interrupted during upload.",
+    uploadAborted: "The upload was cancelled.",
+    copyManually: "Please select the link and copy it manually.",
+    shareTitle: "Share link",
+    ready: "Ready to share",
+    linkReady: "Your link is ready.",
+    resultCopy: (plural: boolean) => `Anyone with this link can download the ${plural ? "files" : "file"} until it expires.`,
+    openLink: "Open share link",
+    copyLink: "Copy share link",
+    file: "file",
+    files: "files",
+    until: "until",
+    linkCopied: "Link copied",
+    shareLink: "Share link",
+    newTransfer: "Create another transfer",
+    newTransferKicker: "New transfer",
+    question: "What would you like to share?",
+    chooseFiles: "Choose files",
+    dropLabel: "Drop files here or choose files",
+    dropFiles: "Drop files here",
+    clickToChoose: "or click to choose",
+    selectedFiles: "Selected files",
+    uploaded: "uploaded",
+    remove: "remove",
+    validFor: "Link valid for",
+    day: "day",
+    days: "days",
+    note: "Note",
+    optional: "optional",
+    placeholder: "e.g. here are the holiday photos …",
+    uploading: "Uploading …",
+    privacy: "The link is random and is not listed publicly.",
+    locale: "en-GB",
+  },
+} as const;
+
 type UploadResult = {
   id: string;
   url: string;
@@ -44,7 +125,8 @@ function FileGlyph({ file }: { file: File }) {
   return <FileText size={19} />;
 }
 
-export function TransferPanel() {
+export function TransferPanel({ language }: { language: Language }) {
+  const text = translations[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -72,12 +154,12 @@ export function TransferPanel() {
     const unique = incoming.filter((file) => !known.has(fileKey(file)));
     const next = [...files, ...unique];
     if (next.length > MAX_FILES) {
-      setError(`Du kannst höchstens ${MAX_FILES} Dateien auf einmal teilen.`);
+      setError(text.tooManyFiles(MAX_FILES));
       return;
     }
     const size = next.reduce((sum, file) => sum + file.size, 0);
     if (size > MAX_TOTAL_SIZE) {
-      setError("Die Übertragung darf insgesamt höchstens 15GB groß sein.");
+      setError(text.tooLarge);
       return;
     }
     if (!next.length) return;
@@ -129,17 +211,17 @@ export function TransferPanel() {
             resolve(response);
             return;
           }
-          reject(new Error(response?.error || "Die Übertragung konnte nicht erstellt werden."));
+          reject(new Error(response?.error || text.uploadFailed));
         });
-        request.addEventListener("error", () => reject(new Error("Die Verbindung wurde beim Hochladen unterbrochen.")));
-        request.addEventListener("abort", () => reject(new Error("Der Upload wurde abgebrochen.")));
+        request.addEventListener("error", () => reject(new Error(text.connectionLost)));
+        request.addEventListener("abort", () => reject(new Error(text.uploadAborted)));
         request.send(body);
       });
       setResult(payload);
       setCopied(false);
     } catch (uploadError) {
       setUploadedBytes(0);
-      setError(uploadError instanceof Error ? uploadError.message : "Die Übertragung konnte nicht erstellt werden.");
+      setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
     } finally {
       uploadingRef.current = false;
       setUploading(false);
@@ -153,7 +235,7 @@ export function TransferPanel() {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2400);
     } catch {
-      setError("Bitte markiere den Link und kopiere ihn manuell.");
+      setError(text.copyManually);
     }
   }
 
@@ -161,7 +243,7 @@ export function TransferPanel() {
     if (!result) return;
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Freigabelink", url: result.url });
+        await navigator.share({ title: text.shareTitle, url: result.url });
         return;
       } catch (shareError) {
         if (shareError instanceof DOMException && shareError.name === "AbortError") return;
@@ -184,30 +266,28 @@ export function TransferPanel() {
     return (
       <section className="transfer-card result-card" aria-live="polite">
         <div className="success-mark"><Check size={26} strokeWidth={2.5} aria-hidden="true" /></div>
-        <p className="panel-kicker">Bereit zum Teilen</p>
-        <h2>Dein Link ist fertig.</h2>
-        <p className="result-copy">
-          Jeder mit diesem Link kann die {files.length === 1 ? "Datei" : "Dateien"} bis zum Ablaufdatum herunterladen.
-        </p>
+        <p className="panel-kicker">{text.ready}</p>
+        <h2>{text.linkReady}</h2>
+        <p className="result-copy">{text.resultCopy(files.length !== 1)}</p>
         <div className="share-link-row">
-          <a className="share-link" href={result.url} target="_blank" rel="noreferrer" aria-label="Freigabelink öffnen">
+          <a className="share-link" href={result.url} target="_blank" rel="noreferrer" aria-label={text.openLink}>
             {result.url}
           </a>
-          <button type="button" onClick={copyLink} aria-label="Freigabelink kopieren">
+          <button type="button" onClick={copyLink} aria-label={text.copyLink}>
             {copied ? <Check size={18} /> : <Clipboard size={18} />}
           </button>
         </div>
         <div className="result-meta">
-          <span>{files.length} {files.length === 1 ? "Datei" : "Dateien"}</span>
+          <span>{files.length} {files.length === 1 ? text.file : text.files}</span>
           <span>{formatBytes(totalSize)}</span>
-          <span>bis {new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(new Date(result.expiresAt))}</span>
+          <span>{text.until} {new Intl.DateTimeFormat(text.locale, { dateStyle: "medium" }).format(new Date(result.expiresAt))}</span>
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button" type="button" onClick={shareLink}>
           {copied ? <Check size={18} /> : <Send size={18} />}
-          {copied ? "Link kopiert" : "Freigabelink teilen"}
+          {copied ? text.linkCopied : text.shareLink}
         </button>
-        <button className="text-button" type="button" onClick={reset}>Neue Übertragung erstellen</button>
+        <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
       </section>
     );
   }
@@ -216,13 +296,13 @@ export function TransferPanel() {
     <section className="transfer-card" aria-labelledby="transfer-title">
       <div className="card-heading">
         <div>
-          <p className="panel-kicker">Neue Übertragung</p>
-          <h2 id="transfer-title">Was möchtest du teilen?</h2>
+          <p className="panel-kicker">{text.newTransferKicker}</p>
+          <h2 id="transfer-title">{text.question}</h2>
         </div>
         <div className="limit-pill">max. 15GB</div>
       </div>
 
-      <input ref={inputRef} className="sr-only" type="file" multiple disabled={uploading} onChange={onFilesSelected} aria-label="Dateien auswählen" />
+      <input ref={inputRef} className="sr-only" type="file" multiple disabled={uploading} onChange={onFilesSelected} aria-label={text.chooseFiles} />
 
       <div
         className={`dropzone ${dragging ? "is-dragging" : ""}`}
@@ -235,26 +315,26 @@ export function TransferPanel() {
         onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false); }}
         onDrop={onDrop}
         aria-disabled={uploading}
-        aria-label="Dateien hier ablegen oder auswählen"
+        aria-label={text.dropLabel}
       >
         <div className="upload-icon"><UploadCloud size={24} aria-hidden="true" /></div>
-        <div><strong>Dateien hier ablegen</strong><span>oder klicken, um auszuwählen</span></div>
+        <div><strong>{text.dropFiles}</strong><span>{text.clickToChoose}</span></div>
         <Plus className="dropzone-plus" size={20} aria-hidden="true" />
       </div>
 
       {files.length > 0 && (
-        <div className="file-list" aria-label="Ausgewählte Dateien">
-          <div className="file-list-heading"><span>{files.length} {files.length === 1 ? "Datei" : "Dateien"}</span><span>{formatBytes(totalSize)}</span></div>
+        <div className="file-list" aria-label={text.selectedFiles}>
+          <div className="file-list-heading"><span>{files.length} {files.length === 1 ? text.file : text.files}</span><span>{formatBytes(totalSize)}</span></div>
           {files.map((file, index) => {
             const fileUploadedBytes = uploadedBytesForFile(index);
             const fileProgress = file.size ? Math.min(100, Math.round((fileUploadedBytes / file.size) * 100)) : 100;
             return (
               <div className="file-row" key={fileKey(file)}>
-                <span className="file-progress" aria-label={`${fileProgress}% hochgeladen`}>{fileProgress}%</span>
+                <span className="file-progress" aria-label={`${fileProgress}% ${text.uploaded}`}>{fileProgress}%</span>
                 <span className="file-glyph" aria-hidden="true"><FileGlyph file={file} /></span>
                 <span className="file-name" title={file.name}>{file.name}</span>
                 <span className="file-size"><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</span>
-                <button type="button" disabled={uploading} onClick={() => setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={`${file.name} entfernen`}><Trash2 size={16} /></button>
+                <button type="button" disabled={uploading} onClick={() => setFiles((current) => current.filter((item) => fileKey(item) !== fileKey(file)))} aria-label={`${file.name} ${text.remove}`}><Trash2 size={16} /></button>
               </div>
             );
           })}
@@ -263,17 +343,17 @@ export function TransferPanel() {
 
       <div className="settings-row">
         <label>
-          <span>Link gültig für</span>
+          <span>{text.validFor}</span>
           <span className="select-wrap">
             <select value={days} disabled={uploading} onChange={(event) => setDays(event.target.value)}>
-              <option value="1">1 Tag</option><option value="3">3 Tage</option><option value="7">7 Tage</option>
+              <option value="1">1 {text.day}</option><option value="3">3 {text.days}</option><option value="7">7 {text.days}</option>
             </select>
             <ChevronDown size={16} aria-hidden="true" />
           </span>
         </label>
         <label>
-          <span>Notiz <em>optional</em></span>
-          <textarea maxLength={500} rows={2} disabled={uploading} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="z. b. hier sind die urlaubsfotos …" />
+          <span>{text.note} <em>{text.optional}</em></span>
+          <textarea maxLength={500} rows={2} disabled={uploading} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={text.placeholder} />
         </label>
       </div>
 
@@ -281,10 +361,10 @@ export function TransferPanel() {
 
       <button className="primary-button" type="button" disabled={!files.length || uploading} onClick={() => void createTransfer(files)}>
         {uploading ? <LoaderCircle className="spinner" size={19} aria-hidden="true" /> : <Send size={18} aria-hidden="true" />}
-        {uploading ? "Upload läuft …" : "Freigabelink teilen"}
+        {uploading ? text.uploading : text.shareLink}
       </button>
 
-      <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />Der Link ist zufällig und wird nicht öffentlich gelistet.</p>
+      <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />{text.privacy}</p>
     </section>
   );
 }
