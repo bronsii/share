@@ -22,6 +22,16 @@ export type TransferManifest = {
 
 export type UploadSession = TransferManifest;
 
+export type AdminTransfer = {
+  folderName: string;
+  id: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  status: "active" | "expired" | "incomplete";
+  files: Array<{ id: string | null; name: string; size: number }>;
+  totalSize: number;
+};
+
 const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
 const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
@@ -178,6 +188,67 @@ export async function writeTransferManifest(manifest: TransferManifest) {
 
 export async function removeTransferFolder(folderName: string) {
   await rm(transferFolder(folderName), { recursive: true, force: true });
+}
+
+export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
+  await mkdir(SHARED_ROOT, { recursive: true });
+  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
+  const transfers = await Promise.all(entries
+    .filter((entry) => entry.isDirectory() && FOLDER_PATTERN.test(entry.name))
+    .map(async (entry): Promise<AdminTransfer> => {
+      const folderName = entry.name;
+      const folder = transferFolder(folderName);
+      let metadata: TransferManifest | UploadSession | null = null;
+      let complete = false;
+
+      try {
+        metadata = JSON.parse(await readFile(manifestPath(folderName), "utf8")) as TransferManifest;
+        complete = true;
+      } catch {
+        try {
+          metadata = JSON.parse(await readFile(uploadSessionPath(folderName), "utf8")) as UploadSession;
+        } catch {
+          metadata = null;
+        }
+      }
+
+      const folderStat = await stat(folder);
+      if (metadata) {
+        const files = await Promise.all(metadata.files.map(async (file) => {
+          try {
+            return { id: file.id, name: file.name, size: (await stat(storedFilePath(folderName, file.storedName))).size };
+          } catch {
+            return { id: file.id, name: file.name, size: 0 };
+          }
+        }));
+        const expired = complete && transferIsExpired(metadata);
+        return {
+          folderName,
+          id: complete ? metadata.id : null,
+          createdAt: metadata.createdAt || folderStat.birthtime.toISOString(),
+          expiresAt: metadata.expiresAt || null,
+          status: complete ? (expired ? "expired" : "active") : "incomplete",
+          files,
+          totalSize: files.reduce((sum, file) => sum + file.size, 0),
+        };
+      }
+
+      const rawEntries = await readdir(folder, { withFileTypes: true });
+      const files = await Promise.all(rawEntries
+        .filter((file) => file.isFile() && !file.name.endsWith(".json") && !file.name.endsWith(".tmp"))
+        .map(async (file) => ({ id: null, name: file.name, size: (await stat(path.join(folder, file.name))).size })));
+      return {
+        folderName,
+        id: null,
+        createdAt: folderStat.birthtime.toISOString(),
+        expiresAt: null,
+        status: "incomplete",
+        files,
+        totalSize: files.reduce((sum, file) => sum + file.size, 0),
+      };
+    }));
+
+  return transfers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export async function getStoredFile(transferId: string, fileId: string) {

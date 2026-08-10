@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LockKeyhole } from "lucide-react";
 import { Language, TransferPanel } from "./transfer-panel";
 
 const heroCopy = {
@@ -51,6 +52,9 @@ export default function Home() {
           <TransferPanel language={language} />
         </div>
       </section>
+      <a className="admin-lock-link" href="/verwaltung" aria-label="Private Verwaltung öffnen" title="Verwaltung">
+        <LockKeyhole size={14} />
+      </a>
     </main>
   );
 }

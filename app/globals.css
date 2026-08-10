@@ -137,6 +137,85 @@ a { color: inherit; text-decoration: none; }
 .compact-copy .eyebrow { margin: 0 0 20px; }
 .compact-copy .hero-lead { margin-bottom: 0; }
 
+.admin-lock-link {
+  position: fixed;
+  z-index: 20;
+  right: 16px;
+  bottom: 14px;
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 50%;
+  color: rgba(255,255,255,0.34);
+  background: rgba(0,0,0,0.12);
+  transition: color 160ms ease, background 160ms ease;
+}
+.admin-lock-link:hover, .admin-lock-link:focus-visible { color: #fff; background: rgba(0,0,0,0.3); }
+
+.admin-page {
+  min-height: 100vh;
+  padding: 34px max(22px, 5vw) 70px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 78% -10%, rgba(243,171,36,0.3), transparent 31%),
+    linear-gradient(135deg, #26160f 0%, #49271a 56%, #281710 100%);
+}
+.admin-back { display: inline-flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.66); font-size: 12px; }
+.admin-back:hover { color: #fff; }
+.admin-loading, .admin-login-card, .admin-dashboard { position: relative; z-index: 1; width: min(900px, 100%); margin: 72px auto 0; }
+.admin-loading { display: flex; align-items: center; justify-content: center; gap: 10px; color: rgba(255,255,255,0.72); }
+.admin-spin { animation: admin-spin 900ms linear infinite; }
+@keyframes admin-spin { to { transform: rotate(360deg); } }
+.admin-login-card {
+  width: min(430px, 100%);
+  padding: 38px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  color: var(--ink);
+  background: rgba(255,255,255,0.97);
+  box-shadow: 0 30px 90px rgba(0,0,0,0.3);
+}
+.admin-lock-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: var(--violet-dark); background: #ffe5c8; }
+.admin-kicker { margin: 22px 0 7px; color: var(--violet-dark); font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; }
+.admin-login-card h1, .admin-topline h1 { margin: 0; letter-spacing: -0.045em; }
+.admin-login-card h1 { font-size: 29px; }
+.admin-login-card > p:not(.admin-kicker) { margin: 10px 0 25px; color: var(--muted); font-size: 13px; }
+.admin-login-card label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.admin-login-card input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 11px; outline: none; background: #fffaf4; }
+.admin-login-card input:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(217,107,30,0.13); }
+.admin-login-card button { width: 100%; height: 47px; margin-top: 14px; border: 0; border-radius: 11px; color: #fff; background: var(--violet-dark); font-weight: 700; cursor: pointer; }
+.admin-login-card button:disabled { opacity: 0.55; cursor: wait; }
+.admin-error { padding: 11px 13px; border-radius: 9px; color: #8c2630; background: #fff0f0; font-size: 11px; }
+.admin-topline { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.admin-topline .admin-kicker { color: #f5ad3d; }
+.admin-topline h1 { font-size: clamp(32px, 6vw, 48px); }
+.admin-topline div > p:last-child { margin: 8px 0 0; color: rgba(255,255,255,0.58); font-size: 12px; }
+.admin-actions { display: flex; gap: 8px; }
+.admin-actions button { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.15); border-radius: 11px; color: #fff; background: rgba(255,255,255,0.07); cursor: pointer; }
+.admin-empty { min-height: 230px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(255,255,255,0.12); border-radius: 19px; color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.05); }
+.admin-empty span { font-size: 11px; }
+.admin-transfer-list { display: grid; gap: 13px; }
+.admin-transfer { overflow: hidden; border-radius: 17px; color: var(--ink); background: rgba(255,255,255,0.97); box-shadow: 0 13px 40px rgba(0,0,0,0.16); }
+.admin-transfer-head, .admin-transfer-foot { padding: 15px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.admin-status { display: inline-flex; padding: 4px 7px; border-radius: 99px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
+.admin-status.is-active { color: #236b43; background: #dff5e8; }
+.admin-status.is-expired { color: #963d24; background: #ffe6d9; }
+.admin-status.is-incomplete { color: #785f16; background: #fff2c7; }
+.admin-created { margin-left: 9px; color: #918276; font-size: 10px; }
+.admin-transfer-head > strong { flex: 0 0 auto; font-size: 13px; }
+.admin-files { border-block: 1px solid #eadfd6; background: #fffaf5; }
+.admin-file { min-height: 44px; padding: 8px 18px; display: grid; grid-template-columns: 23px minmax(0,1fr) auto; align-items: center; gap: 7px; border-bottom: 1px solid #f0e8e1; }
+.admin-file:last-child { border-bottom: 0; }
+.admin-file svg { color: var(--violet); }
+.admin-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.admin-file small { color: #93877e; font-size: 10px; }
+.admin-file-empty { display: flex; color: #93877e; font-size: 10px; }
+.admin-transfer-foot > span { display: inline-flex; align-items: center; gap: 6px; color: #887a70; font-size: 10px; }
+.admin-transfer-foot button { min-height: 35px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 9px; color: #9c2630; background: #ffeaeb; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-transfer-foot button:disabled { opacity: 0.55; cursor: wait; }
+
 .hero-grid {
   position: relative;
   z-index: 2;
@@ -503,6 +582,13 @@ a { color: inherit; text-decoration: none; }
   .download-file { grid-template-columns: 39px minmax(0,1fr) 39px; }
   .download-file-size { display: none; }
   .download-expiry { align-items: flex-start; text-align: left; }
+  .admin-page { padding-inline: 16px; }
+  .admin-loading, .admin-login-card, .admin-dashboard { margin-top: 44px; }
+  .admin-login-card { padding: 27px 21px; }
+  .admin-topline { align-items: flex-start; }
+  .admin-transfer-head, .admin-transfer-foot { align-items: flex-start; }
+  .admin-transfer-foot { flex-direction: column; }
+  .admin-transfer-foot button { width: 100%; justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
