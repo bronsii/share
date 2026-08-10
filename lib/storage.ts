@@ -37,6 +37,7 @@ const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
 const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;
 const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
+const INCOMPLETE_UPLOAD_MAX_IDLE_MS = 12 * 60 * 60 * 1000;
 
 export class InsufficientStorageError extends Error {}
 
@@ -280,11 +281,35 @@ export async function cleanupExpiredTransfers() {
   for (const entry of entries) {
     if (!entry.isDirectory() || !FOLDER_PATTERN.test(entry.name)) continue;
     try {
-      await access(manifestPath(entry.name));
-      const manifest = JSON.parse(await readFile(manifestPath(entry.name), "utf8")) as TransferManifest;
-      if (transferIsExpired(manifest)) await deleteTransfer(manifest);
+      let manifest: TransferManifest | null = null;
+      try {
+        await access(manifestPath(entry.name));
+        manifest = JSON.parse(await readFile(manifestPath(entry.name), "utf8")) as TransferManifest;
+      } catch {
+        // Uploads ohne Manifest sind noch unvollständig oder wurden abgebrochen.
+      }
+
+      if (manifest) {
+        if (transferIsExpired(manifest)) await deleteTransfer(manifest);
+        continue;
+      }
+
+      const folder = transferFolder(entry.name);
+      const folderStat = await stat(folder);
+      const children = await readdir(folder, { withFileTypes: true });
+      const childTimes = await Promise.all(children.map(async (child) => {
+        try {
+          return (await stat(path.join(folder, child.name))).mtimeMs;
+        } catch {
+          return 0;
+        }
+      }));
+      const newestActivity = Math.max(folderStat.mtimeMs, ...childTimes);
+      if (Date.now() - newestActivity >= INCOMPLETE_UPLOAD_MAX_IDLE_MS) {
+        await removeTransferFolder(entry.name);
+      }
     } catch {
-      // Unvollständige oder manuell angelegte Ordner bleiben unangetastet.
+      // Nicht lesbare oder gerade veränderte Ordner werden beim nächsten Lauf erneut geprüft.
     }
   }
 }
