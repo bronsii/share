@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Clock3, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
 
 type AdminTransfer = {
@@ -32,6 +32,7 @@ export function AdminPanel() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState("");
+  const codeInput = useRef<HTMLInputElement | null>(null);
 
   const loadTransfers = useCallback(async () => {
     const response = await fetch("/api/admin/transfers", { cache: "no-store" });
@@ -55,8 +56,8 @@ export function AdminPanel() {
       });
   }, [loadTransfers]);
 
-  async function login(event: FormEvent) {
-    event.preventDefault();
+  async function login(code: string) {
+    if (busy || code.length !== 4) return;
     setBusy(true);
     setError("");
     const response = await fetch("/api/admin/session", {
@@ -67,12 +68,21 @@ export function AdminPanel() {
     const data = await response.json().catch(() => ({})) as { error?: string };
     if (!response.ok) {
       setError(data.error ?? "Anmeldung fehlgeschlagen.");
+      setCode("");
       setBusy(false);
+      requestAnimationFrame(() => codeInput.current?.focus());
       return;
     }
     setCode("");
     await loadTransfers().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Laden fehlgeschlagen."));
     setBusy(false);
+  }
+
+  function updateCode(rawValue: string) {
+    const next = rawValue.replace(/\D/g, "").slice(0, 4);
+    setError("");
+    setCode(next);
+    if (next.length === 4) void login(next);
   }
 
   async function logout() {
@@ -107,11 +117,28 @@ export function AdminPanel() {
         <p className="admin-kicker">Private Verwaltung</p>
         <h1>Upload-Speicher</h1>
         <p>Gib deinen Verwaltungscode ein.</p>
-        <form onSubmit={login}>
+        <form onSubmit={(event) => { event.preventDefault(); void login(code); }}>
           <label htmlFor="admin-code">Code</label>
-          <input id="admin-code" type="password" inputMode="numeric" autoComplete="current-password" value={code} onChange={(event) => setCode(event.target.value)} autoFocus required />
+          <div className="admin-code-inputs" onClick={() => codeInput.current?.focus()}>
+            <div className="admin-code-boxes" aria-hidden="true">
+              {Array.from({ length: 4 }, (_, index) => <span key={index}>{code[index] ? "•" : ""}</span>)}
+            </div>
+            <input
+              ref={codeInput}
+              id="admin-code"
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              maxLength={4}
+              aria-label="Vierstelliger Verwaltungscode"
+              onChange={(event) => updateCode(event.target.value)}
+              autoFocus
+              disabled={busy}
+            />
+          </div>
           {error && <p className="admin-error" role="alert">{error}</p>}
-          <button type="submit" disabled={busy}>{busy ? "Prüfe …" : "Entsperren"}</button>
+          {busy && <p className="admin-code-state" role="status">Prüfe …</p>}
         </form>
       </div>
     );

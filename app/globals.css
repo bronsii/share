@@ -183,10 +183,14 @@ a { color: inherit; text-decoration: none; }
 .admin-login-card h1 { font-size: 29px; }
 .admin-login-card > p:not(.admin-kicker) { margin: 10px 0 25px; color: var(--muted); font-size: 13px; }
 .admin-login-card label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
-.admin-login-card input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 11px; outline: none; background: #fffaf4; }
-.admin-login-card input:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(217,107,30,0.13); }
-.admin-login-card button { width: 100%; height: 47px; margin-top: 14px; border: 0; border-radius: 11px; color: #fff; background: var(--violet-dark); font-weight: 700; cursor: pointer; }
-.admin-login-card button:disabled { opacity: 0.55; cursor: wait; }
+.admin-code-inputs { position: relative; cursor: text; }
+.admin-code-boxes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.admin-code-boxes span { height: 58px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fffaf4; font-size: 25px; font-weight: 700; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.admin-code-inputs:focus-within .admin-code-boxes span { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(217,107,30,0.1); }
+.admin-code-inputs input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0.01; cursor: text; }
+.admin-code-inputs input:focus { outline: none; }
+.admin-code-inputs input:disabled { cursor: wait; }
+.admin-code-state { margin: 13px 0 0; color: var(--violet-dark); font-size: 11px; text-align: center; }
 .admin-error { padding: 11px 13px; border-radius: 9px; color: #8c2630; background: #fff0f0; font-size: 11px; }
 .admin-topline { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .admin-topline .admin-kicker { color: #f5ad3d; }
