@@ -50,6 +50,13 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
           <div className="download-total"><span>Gesamt</span><strong>{formatBytes(totalSize)}</strong></div>
         </div>
         {transfer.message && <blockquote className="sender-message">„{transfer.message}“</blockquote>}
+        {transfer.files.length > 1 && (
+          <a className="download-all-button" href={`/api/transfers/${transfer.id}/download-all`}>
+            <FileArchive size={21} aria-hidden="true" />
+            <span><strong>Alle Dateien herunterladen</strong><small>Gemeinsam als ZIP-Datei</small></span>
+            <Download size={19} aria-hidden="true" />
+          </a>
+        )}
         <div className="download-file-list">
           {transfer.files.map((file) => (
             <div className="download-file" key={file.id}>
