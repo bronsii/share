@@ -18,6 +18,8 @@ export type TransferManifest = {
   expiresAt: string;
   message: string;
   files: TransferFile[];
+  views?: number;
+  downloads?: number;
 };
 
 export type UploadSession = TransferManifest;
@@ -30,6 +32,8 @@ export type AdminTransfer = {
   status: "active" | "expired" | "incomplete";
   files: Array<{ id: string | null; name: string; size: number }>;
   totalSize: number;
+  viewCount: number;
+  downloadCount: number;
 };
 
 const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
@@ -38,6 +42,8 @@ const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f
 const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;
 const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
 const INCOMPLETE_UPLOAD_MAX_IDLE_MS = 12 * 60 * 60 * 1000;
+
+const transferStatUpdates = new Map<string, Promise<boolean>>();
 
 export class InsufficientStorageError extends Error {}
 
@@ -187,6 +193,34 @@ export async function writeTransferManifest(manifest: TransferManifest) {
   await rename(temporaryManifestPath, finalManifestPath);
 }
 
+export async function incrementTransferStat(id: string, statName: "views" | "downloads") {
+  const idMatch = TRANSFER_ID_PATTERN.exec(id);
+  if (!idMatch) return false;
+  const folderName = idMatch[1];
+  const previousUpdate = transferStatUpdates.get(id) ?? Promise.resolve(true);
+  const currentUpdate = previousUpdate.catch(() => false).then(async () => {
+    try {
+      const finalManifestPath = manifestPath(folderName);
+      const manifest = JSON.parse(await readFile(finalManifestPath, "utf8")) as TransferManifest;
+      if (manifest.id !== id || transferIsExpired(manifest)) return false;
+      manifest[statName] = Math.max(0, Number(manifest[statName]) || 0) + 1;
+      const temporaryManifestPath = `${finalManifestPath}.${crypto.randomUUID()}.tmp`;
+      await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), {
+        encoding: "utf8",
+        flag: "wx",
+      });
+      await rename(temporaryManifestPath, finalManifestPath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  transferStatUpdates.set(id, currentUpdate);
+  const updated = await currentUpdate;
+  if (transferStatUpdates.get(id) === currentUpdate) transferStatUpdates.delete(id);
+  return updated;
+}
+
 export async function removeTransferFolder(folderName: string) {
   await rm(transferFolder(folderName), { recursive: true, force: true });
 }
@@ -231,6 +265,8 @@ export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
           status: complete ? (expired ? "expired" : "active") : "incomplete",
           files,
           totalSize: files.reduce((sum, file) => sum + file.size, 0),
+          viewCount: complete ? Math.max(0, Number(metadata.views) || 0) : 0,
+          downloadCount: complete ? Math.max(0, Number(metadata.downloads) || 0) : 0,
         };
       }
 
@@ -246,6 +282,8 @@ export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
         status: "incomplete",
         files,
         totalSize: files.reduce((sum, file) => sum + file.size, 0),
+        viewCount: 0,
+        downloadCount: 0,
       };
     }));
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Clock3, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Clock3, Download, Eye, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
 
 type AdminTransfer = {
   folderName: string;
@@ -11,6 +11,8 @@ type AdminTransfer = {
   status: "active" | "expired" | "incomplete";
   files: Array<{ id: string | null; name: string; size: number }>;
   totalSize: number;
+  viewCount: number;
+  downloadCount: number;
 };
 
 const statusText = { active: "Aktiv", expired: "Abgelaufen", incomplete: "Unvollständig" } as const;
@@ -182,7 +184,13 @@ export function AdminPanel() {
                 )) : <div className="admin-file admin-file-empty">Keine Datei im Ordner</div>}
               </div>
               <div className="admin-transfer-foot">
-                <span><Clock3 size={14} />{transfer.expiresAt ? `gültig bis ${formatDate(transfer.expiresAt)}` : "kein Ablaufdatum"}</span>
+                <div className="admin-transfer-info">
+                  {transfer.id && <span className="admin-transfer-stats">
+                    <Eye size={14} />{transfer.viewCount > 0 ? `Link geöffnet: Ja (${transfer.viewCount}×)` : "Link geöffnet: Nein"}
+                    <Download size={14} />Downloads: {transfer.downloadCount}
+                  </span>}
+                  <span><Clock3 size={14} />{transfer.expiresAt ? `gültig bis ${formatDate(transfer.expiresAt)}` : "kein Ablaufdatum"}</span>
+                </div>
                 <button type="button" onClick={() => void deleteTransfer(transfer)} disabled={deleting === transfer.folderName}>
                   <Trash2 size={16} />{deleting === transfer.folderName ? "Lösche …" : "Freigabe löschen"}
                 </button>

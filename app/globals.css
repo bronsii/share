@@ -216,7 +216,10 @@ a { color: inherit; text-decoration: none; }
 .admin-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .admin-file small { color: #93877e; font-size: 10px; }
 .admin-file-empty { display: flex; color: #93877e; font-size: 10px; }
-.admin-transfer-foot > span { display: inline-flex; align-items: center; gap: 6px; color: #887a70; font-size: 10px; }
+.admin-transfer-info { display: grid; gap: 7px; }
+.admin-transfer-info > span { display: inline-flex; align-items: center; gap: 6px; color: #887a70; font-size: 10px; }
+.admin-transfer-stats { color: #4c4139 !important; font-weight: 650; }
+.admin-transfer-stats svg:nth-of-type(2) { margin-left: 8px; }
 .admin-transfer-foot button { min-height: 35px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 9px; color: #9c2630; background: #ffeaeb; font-size: 10px; font-weight: 700; cursor: pointer; }
 .admin-transfer-foot button:disabled { opacity: 0.55; cursor: wait; }
 

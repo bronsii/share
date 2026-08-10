@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Clock3, Download, FileArchive, FileImage, FileText, ShieldCheck } from "lucide-react";
 import { getTransfer, transferIsExpired } from "@/lib/storage";
+import { TransferViewTracker } from "./view-tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
   const expires = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(transfer.expiresAt));
   return (
     <main className="download-page">
+      <TransferViewTracker id={transfer.id} />
       <div className="download-ambient" />
       <header className="download-header">
         <Link className="back-link" href="/"><ArrowLeft size={16} /> Zur Startseite</Link>

@@ -1,4 +1,4 @@
-import { deleteTransfer, getStoredFile, getTransfer } from "@/lib/storage";
+import { deleteTransfer, getStoredFile, getTransfer, incrementTransferStat } from "@/lib/storage";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 
@@ -22,6 +22,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!file) return new Response("Datei nicht gefunden.", { status: 404 });
   const object = await getStoredFile(id, fileId);
   if (!object) return new Response("Datei nicht gefunden.", { status: 404 });
+  await incrementTransferStat(id, "downloads");
   const body = Readable.toWeb(createReadStream(object.path)) as ReadableStream<Uint8Array>;
   return new Response(body, {
     headers: {
