@@ -86,7 +86,7 @@ const translations = {
     shareLink: "Share link",
     newTransfer: "Create another transfer",
     newTransferKicker: "New transfer",
-    question: "What would you like to share?",
+    question: "What are you sharing?",
     chooseFiles: "Choose files",
     dropLabel: "Drop files here or choose files",
     dropFiles: "Drop files here",
