@@ -7,9 +7,10 @@ import {
   cleanupExpiredTransfers,
   createFolderName,
   createTransferId,
-  ensureStorageCapacity,
   InsufficientStorageError,
   prepareTransferFolder,
+  releaseStorageReservation,
+  reserveStorageCapacity,
   removeTransferFolder,
   storedFilePath,
   TransferFile,
@@ -175,10 +176,11 @@ export async function POST(request: Request) {
   const now = new Date();
   const folderName = createFolderName(now);
   let folderPrepared = false;
+  let storageReservationId: string | undefined;
 
   try {
     await cleanupExpiredTransfers();
-    await ensureStorageCapacity(contentLength);
+    storageReservationId = await reserveStorageCapacity(contentLength);
     await prepareTransferFolder(folderName);
     folderPrepared = true;
 
@@ -194,6 +196,10 @@ export async function POST(request: Request) {
       files: upload.files,
     };
     await writeTransferManifest(manifest);
+    await releaseStorageReservation(storageReservationId).catch((error) => {
+      console.error("Storage reservation release failed", error);
+    });
+    storageReservationId = undefined;
 
     return NextResponse.json(
       { id, url: `${publicOrigin(request)}/t/${id}`, expiresAt: manifest.expiresAt },
@@ -201,6 +207,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (folderPrepared) await removeTransferFolder(folderName).catch(() => undefined);
+    await releaseStorageReservation(storageReservationId).catch(() => undefined);
     console.error("Transfer upload failed", error);
     if (error instanceof UploadError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

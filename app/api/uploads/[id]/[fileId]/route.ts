@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { NextResponse } from "next/server";
-import { getUploadFile } from "@/lib/storage";
+import { consumeStorageReservation, getUploadFile } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +30,9 @@ export async function PUT(request: Request, context: Context) {
     );
     const uploaded = (await stat(target.path)).size;
     if (uploaded > target.file.size) throw new Error("Datei ist gr\u00f6\u00dfer als erwartet.");
+    await consumeStorageReservation(target.session.storageReservationId, uploaded - target.uploaded).catch((error) => {
+      console.error("Storage reservation update failed", error);
+    });
     return NextResponse.json({ uploaded }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (request.signal.aborted) return NextResponse.json({ error: "Upload pausiert." }, { status: 499 });
