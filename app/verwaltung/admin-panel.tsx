@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-autofocus -- Das PIN-Feld soll beim Öffnen der Verwaltung sofort eingabebereit sein. */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock3, Download, Eye, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
@@ -37,6 +39,15 @@ export function AdminPanel() {
   const [deleting, setDeleting] = useState("");
   const codeInput = useRef<HTMLInputElement | null>(null);
 
+  const focusCodeInput = useCallback(() => {
+    requestAnimationFrame(() => {
+      const input = codeInput.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }, []);
+
   const loadTransfers = useCallback(async () => {
     const response = await fetch("/api/admin/transfers", { cache: "no-store" });
     if (response.status === 401) {
@@ -61,8 +72,8 @@ export function AdminPanel() {
 
   useEffect(() => {
     if (authenticated !== false) return;
-    requestAnimationFrame(() => codeInput.current?.focus());
-  }, [authenticated]);
+    focusCodeInput();
+  }, [authenticated, focusCodeInput]);
 
   async function login(code: string) {
     if (busy || code.length !== 4) return;
@@ -78,7 +89,7 @@ export function AdminPanel() {
       setError(data.error ?? "Anmeldung fehlgeschlagen.");
       setCode("");
       setBusy(false);
-      requestAnimationFrame(() => codeInput.current?.focus());
+      focusCodeInput();
       return;
     }
     setCode("");
@@ -129,7 +140,11 @@ export function AdminPanel() {
           <label htmlFor="admin-code">Code</label>
           <label className="admin-code-inputs">
             <div className="admin-code-boxes" aria-hidden="true">
-              {Array.from({ length: 4 }, (_, index) => <span key={index}>{code[index] ? "•" : ""}</span>)}
+              {Array.from({ length: 4 }, (_, index) => (
+                <span className={index === code.length ? "is-current" : undefined} key={index}>
+                  {code[index] ? "•" : ""}
+                </span>
+              ))}
             </div>
             <input
               ref={codeInput}
@@ -137,6 +152,7 @@ export function AdminPanel() {
               type="password"
               inputMode="numeric"
               autoComplete="one-time-code"
+              autoFocus
               value={code}
               maxLength={4}
               aria-label="Vierstelliger Verwaltungscode"

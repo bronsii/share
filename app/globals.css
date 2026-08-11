@@ -178,8 +178,10 @@ a { color: inherit; text-decoration: none; }
 .admin-login-card label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .admin-code-inputs { position: relative; cursor: text; }
 .admin-code-boxes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.admin-code-boxes span { height: 58px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fffaf4; font-size: 25px; font-weight: 700; transition: border-color 150ms ease, box-shadow 150ms ease; }
-.admin-code-inputs:focus-within .admin-code-boxes span { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(217,107,30,0.1); }
+.admin-code-boxes span { position: relative; height: 58px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fffaf4; font-size: 25px; font-weight: 700; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.admin-code-inputs:focus-within .admin-code-boxes span.is-current { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(217,107,30,0.1); }
+.admin-code-inputs:focus-within .admin-code-boxes span.is-current::after { content: ""; width: 2px; height: 25px; border-radius: 2px; background: var(--ink); animation: admin-code-caret 1s steps(1) infinite; }
+@keyframes admin-code-caret { 50% { opacity: 0; } }
 .admin-code-inputs input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0.01; cursor: text; }
 .admin-code-inputs input:focus { outline: none; }
 .admin-code-inputs input:disabled { cursor: wait; }
