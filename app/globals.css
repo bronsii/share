@@ -152,25 +152,23 @@ a { color: inherit; text-decoration: none; }
 .admin-page {
   min-height: 100vh;
   padding: 34px max(22px, 5vw) 70px;
-  color: #fff;
-  background:
-    radial-gradient(circle at 78% -10%, rgba(243,171,36,0.3), transparent 31%),
-    linear-gradient(135deg, #26160f 0%, #49271a 56%, #281710 100%);
+  color: var(--ink);
+  background: #fff;
 }
-.admin-back { display: inline-flex; align-items: center; gap: 8px; color: rgba(255,255,255,0.66); font-size: 12px; }
-.admin-back:hover { color: #fff; }
+.admin-back { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.admin-back:hover { color: var(--ink); }
 .admin-loading, .admin-login-card, .admin-dashboard { position: relative; z-index: 1; width: min(900px, 100%); margin: 72px auto 0; }
-.admin-loading { display: flex; align-items: center; justify-content: center; gap: 10px; color: rgba(255,255,255,0.72); }
+.admin-loading { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
 .admin-spin { animation: admin-spin 900ms linear infinite; }
 @keyframes admin-spin { to { transform: rotate(360deg); } }
 .admin-login-card {
   width: min(430px, 100%);
   padding: 38px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid #eadfd6;
   border-radius: 24px;
   color: var(--ink);
-  background: rgba(255,255,255,0.97);
-  box-shadow: 0 30px 90px rgba(0,0,0,0.3);
+  background: #fff;
+  box-shadow: 0 24px 65px rgba(87, 55, 36, 0.13), 0 2px 8px rgba(87, 55, 36, 0.08);
 }
 .admin-lock-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; color: var(--violet-dark); background: #ffe5c8; }
 .admin-kicker { margin: 22px 0 7px; color: var(--violet-dark); font-size: 10px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; }
@@ -188,15 +186,16 @@ a { color: inherit; text-decoration: none; }
 .admin-code-state { margin: 13px 0 0; color: var(--violet-dark); font-size: 11px; text-align: center; }
 .admin-error { padding: 11px 13px; border-radius: 9px; color: #8c2630; background: #fff0f0; font-size: 11px; }
 .admin-topline { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.admin-topline .admin-kicker { color: #f5ad3d; }
+.admin-topline .admin-kicker { color: var(--violet-dark); }
 .admin-topline h1 { font-size: clamp(32px, 6vw, 48px); }
-.admin-topline div > p:last-child { margin: 8px 0 0; color: rgba(255,255,255,0.58); font-size: 12px; }
+.admin-topline div > p:last-child { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
 .admin-actions { display: flex; gap: 8px; }
-.admin-actions button { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.15); border-radius: 11px; color: #fff; background: rgba(255,255,255,0.07); cursor: pointer; }
-.admin-empty { min-height: 230px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(255,255,255,0.12); border-radius: 19px; color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.05); }
+.admin-actions button { width: 39px; height: 39px; display: grid; place-items: center; border: 1px solid #eadfd6; border-radius: 11px; color: var(--ink); background: #fffaf5; cursor: pointer; }
+.admin-actions button:hover { color: var(--violet-dark); background: #fff4e8; }
+.admin-empty { min-height: 230px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 1px solid #eadfd6; border-radius: 19px; color: var(--muted); background: #fffaf5; }
 .admin-empty span { font-size: 11px; }
 .admin-transfer-list { display: grid; gap: 13px; }
-.admin-transfer { overflow: hidden; border-radius: 17px; color: var(--ink); background: rgba(255,255,255,0.97); box-shadow: 0 13px 40px rgba(0,0,0,0.16); }
+.admin-transfer { overflow: hidden; border: 1px solid #eadfd6; border-radius: 17px; color: var(--ink); background: #fff; box-shadow: 0 12px 32px rgba(87, 55, 36, 0.1); }
 .admin-transfer-head, .admin-transfer-foot { padding: 15px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .admin-status { display: inline-flex; padding: 4px 7px; border-radius: 99px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; }
 .admin-status.is-active { color: #236b43; background: #dff5e8; }
