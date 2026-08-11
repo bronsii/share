@@ -3,9 +3,10 @@ import {
   cleanupExpiredTransfers,
   createFolderName,
   createTransferId,
-  ensureStorageCapacity,
   InsufficientStorageError,
   prepareTransferFolder,
+  releaseStorageReservation,
+  reserveStorageCapacity,
   removeTransferFolder,
   TransferFile,
   UploadSession,
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
   const now = new Date();
   const folderName = createFolderName(now);
   let folderPrepared = false;
+  let storageReservationId: string | undefined;
   try {
     const body = await request.json() as UploadRequest;
     if (!Array.isArray(body.files) || body.files.length < 1 || body.files.length > MAX_FILES) {
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     await cleanupExpiredTransfers();
-    await ensureStorageCapacity(totalSize);
+    storageReservationId = await reserveStorageCapacity(totalSize);
     await prepareTransferFolder(folderName);
     folderPrepared = true;
 
@@ -67,11 +69,13 @@ export async function POST(request: Request) {
       expiresAt: new Date(now.getTime() + days * 86400000).toISOString(),
       message: String(body.message ?? "").trim().slice(0, 500),
       files,
+      storageReservationId,
     };
     await writeUploadSession(session);
     return NextResponse.json({ id: session.id, expiresAt: session.expiresAt, files: files.map(({ id, name, size }) => ({ id, name, size, uploaded: 0 })) }, { status: 201 });
   } catch (error) {
     if (folderPrepared) await removeTransferFolder(folderName).catch(() => undefined);
+    await releaseStorageReservation(storageReservationId).catch(() => undefined);
     console.error("Upload session creation failed", error);
     const status = error instanceof InsufficientStorageError ? 507 : 500;
     return NextResponse.json({ error: error instanceof InsufficientStorageError ? error.message : "Der Upload konnte nicht gestartet werden." }, { status });
