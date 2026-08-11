@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, Clock3, Download, Eye, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
 
 type AdminTransfer = {
@@ -57,6 +58,11 @@ export function AdminPanel() {
         setError("Die Verwaltung ist gerade nicht erreichbar.");
       });
   }, [loadTransfers]);
+
+  useEffect(() => {
+    if (authenticated !== false) return;
+    requestAnimationFrame(() => codeInput.current?.focus());
+  }, [authenticated]);
 
   async function login(code: string) {
     if (busy || code.length !== 4) return;
@@ -121,7 +127,7 @@ export function AdminPanel() {
         <p>Gib deinen Verwaltungscode ein.</p>
         <form onSubmit={(event) => { event.preventDefault(); void login(code); }}>
           <label htmlFor="admin-code">Code</label>
-          <div className="admin-code-inputs" onClick={() => codeInput.current?.focus()}>
+          <label className="admin-code-inputs">
             <div className="admin-code-boxes" aria-hidden="true">
               {Array.from({ length: 4 }, (_, index) => <span key={index}>{code[index] ? "•" : ""}</span>)}
             </div>
@@ -135,10 +141,9 @@ export function AdminPanel() {
               maxLength={4}
               aria-label="Vierstelliger Verwaltungscode"
               onChange={(event) => updateCode(event.target.value)}
-              autoFocus
               disabled={busy}
             />
-          </div>
+          </label>
           {error && <p className="admin-error" role="alert">{error}</p>}
           {busy && <p className="admin-code-state" role="status">Prüfe …</p>}
         </form>
@@ -204,5 +209,5 @@ export function AdminPanel() {
 }
 
 export function AdminBackLink() {
-  return <a className="admin-back" href="/"><ArrowLeft size={16} /> Zurück zu Share</a>;
+  return <Link className="admin-back" href="/"><ArrowLeft size={16} /> Zurück zu Share</Link>;
 }
