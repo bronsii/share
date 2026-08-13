@@ -15,24 +15,29 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
   chunkIndexFromCiphertextOffset,
   ciphertextOffsetForChunk,
   createNoncePrefix,
   createTransferKey,
+  decodeNoncePrefix,
   encodeNoncePrefix,
   encryptedFileSize,
   encryptChunk,
   encryptMetadata,
+  importTransferKey,
   PLAINTEXT_CHUNK_SIZE,
   plaintextProgressFromCiphertext,
 } from "@/lib/e2e-crypto";
+import type { UiLanguage } from "@/lib/ui-language";
+import { orderRecoveryFiles, validUploadRecovery } from "@/lib/upload-recovery.mjs";
 
 const MAX_FILES = 20;
 const MAX_TOTAL_SIZE = 5 * 1024 ** 3;
+const UPLOAD_RECOVERY_STORAGE_KEY = "share-upload-recovery-v1";
 
-export type Language = "de" | "en";
+export type Language = UiLanguage;
 
 const translations = {
   de: {
@@ -77,6 +82,12 @@ const translations = {
     optional: "optional",
     placeholder: "z. B. hier sind die Urlaubsfotos …",
     cancelUpload: "Upload abbrechen und l\u00f6schen",
+    recoveryTitle: "Unterbrochenen Upload fortsetzen",
+    recoveryBody: "Wähle dieselben Dateien erneut aus. Danach läuft der Upload automatisch an der letzten bestätigten Stelle weiter.",
+    recoveryChoose: "Dateien erneut auswählen",
+    recoveryDiscard: "Upload verwerfen",
+    recoveryMismatch: "Die ausgewählten Dateien stimmen nicht mit dem unterbrochenen Upload überein.",
+    recoveryUnavailable: "Der unterbrochene Upload ist nicht mehr verfügbar. Bitte starte eine neue Übertragung.",
     privacy: "Ende-zu-Ende verschlüsselt: Dateien werden vor dem Upload im Browser verschlüsselt. Der Schlüssel bleibt im Freigabelink. Automatische Löschung nach Ablauf.",
     locale: "de-DE",
   },
@@ -122,6 +133,12 @@ const translations = {
     optional: "optional",
     placeholder: "e.g. here are the holiday photos …",
     cancelUpload: "Cancel and delete upload",
+    recoveryTitle: "Resume interrupted upload",
+    recoveryBody: "Choose the same files again. The upload will automatically continue from the last confirmed position.",
+    recoveryChoose: "Choose files again",
+    recoveryDiscard: "Discard upload",
+    recoveryMismatch: "The selected files do not match the interrupted upload.",
+    recoveryUnavailable: "The interrupted upload is no longer available. Please start a new transfer.",
     privacy: "End-to-end encrypted: Files are encrypted in your browser before upload. The key remains in the share link. Automatic deletion after expiry.",
     locale: "en-GB",
   },
@@ -144,6 +161,51 @@ type ClientEncryptionState = {
   fragment: string;
   noncePrefixes: Uint8Array[];
 };
+
+type RecoveryFile = {
+  name: string;
+  size: number;
+  lastModified: number;
+};
+
+type UploadRecovery = {
+  version: 1;
+  session: UploadSession;
+  fragment: string;
+  noncePrefixes: string[];
+  files: RecoveryFile[];
+  days: string;
+  message: string;
+};
+
+function loadUploadRecovery() {
+  try {
+    const stored = window.sessionStorage.getItem(UPLOAD_RECOVERY_STORAGE_KEY);
+    if (!stored) return null;
+    const recovery: unknown = JSON.parse(stored);
+    if (validUploadRecovery(recovery)) return recovery as UploadRecovery;
+    window.sessionStorage.removeItem(UPLOAD_RECOVERY_STORAGE_KEY);
+  } catch {
+    // Beschädigte oder blockierte Sitzungsdaten verhindern keinen neuen Upload.
+  }
+  return null;
+}
+
+function saveUploadRecovery(recovery: UploadRecovery) {
+  try {
+    window.sessionStorage.setItem(UPLOAD_RECOVERY_STORAGE_KEY, JSON.stringify(recovery));
+  } catch {
+    // Der Upload funktioniert weiter, nur die Wiederaufnahme nach Reload entfällt.
+  }
+}
+
+function clearUploadRecovery() {
+  try {
+    window.sessionStorage.removeItem(UPLOAD_RECOVERY_STORAGE_KEY);
+  } catch {
+    // Ein blockierter Sitzungsspeicher muss nicht bereinigt werden.
+  }
+}
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -196,6 +258,18 @@ export function TransferPanel({ language }: { language: Language }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [recovery, setRecovery] = useState<UploadRecovery | null>(null);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const storedRecovery = loadUploadRecovery();
+      if (!storedRecovery) return;
+      setRecovery(storedRecovery);
+      if (["1", "3", "7"].includes(storedRecovery.days)) setDays(storedRecovery.days);
+      setMessage(storedRecovery.message.slice(0, 500));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
   const remainingBytes = Math.max(0, totalSize - uploadedBytes);
@@ -211,6 +285,10 @@ export function TransferPanel({ language }: { language: Language }) {
     if (uploadingRef.current) return;
     setError("");
     setResult(null);
+    if (recovery) {
+      void resumeRecoveredUpload(incoming, recovery);
+      return;
+    }
     if (incoming.some((file) => file.size === 0)) {
       setError(text.emptyOrFolder);
       return;
@@ -246,6 +324,57 @@ export function TransferPanel({ language }: { language: Language }) {
     if (!uploadingRef.current && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
       inputRef.current?.click();
+    }
+  }
+
+  async function resumeRecoveredUpload(incoming: File[], storedRecovery: UploadRecovery) {
+    const orderedFiles = orderRecoveryFiles(incoming, storedRecovery.files);
+    if (!orderedFiles) {
+      setError(text.recoveryMismatch);
+      return;
+    }
+
+    uploadingRef.current = true;
+    pausedRef.current = false;
+    setUploading(true);
+    setPaused(false);
+    setFiles(orderedFiles);
+    setCurrentFileIndex(0);
+    setUploadedBytes(0);
+    setUploadSpeed(0);
+    setError("");
+    speedSampleRef.current = { time: performance.now(), bytes: 0, value: 0 };
+
+    try {
+      const key = await importTransferKey(storedRecovery.fragment);
+      const noncePrefixes = storedRecovery.noncePrefixes.map(decodeNoncePrefix);
+      sessionRef.current = storedRecovery.session;
+      encryptionRef.current = { key, fragment: storedRecovery.fragment, noncePrefixes };
+      setRecovery(null);
+      await continueUpload(orderedFiles, storedRecovery.session);
+    } catch (uploadError) {
+      if (sessionRef.current) {
+        pausedRef.current = true;
+        setPaused(true);
+        setUploadSpeed(0);
+      } else {
+        clearUploadRecovery();
+        setRecovery(null);
+        uploadingRef.current = false;
+        setUploading(false);
+        void fetch(`/api/uploads/${storedRecovery.session.id}`, { method: "DELETE" }).catch(() => undefined);
+      }
+      setError(uploadError instanceof Error ? uploadError.message : text.recoveryUnavailable);
+    }
+  }
+
+  async function discardRecovery() {
+    const storedRecovery = recovery;
+    clearUploadRecovery();
+    setRecovery(null);
+    setError("");
+    if (storedRecovery) {
+      await fetch(`/api/uploads/${storedRecovery.session.id}`, { method: "DELETE" }).catch(() => undefined);
     }
   }
 
@@ -286,6 +415,15 @@ export function TransferPanel({ language }: { language: Language }) {
       const session = await response.json() as UploadSession & { error?: string };
       if (!response.ok || !session.id) throw new Error(session.error || text.uploadFailed);
       sessionRef.current = session;
+      saveUploadRecovery({
+        version: 1,
+        session,
+        fragment,
+        noncePrefixes: noncePrefixes.map(encodeNoncePrefix),
+        files: uploadFiles.map((file) => ({ name: file.name, size: file.size, lastModified: file.lastModified })),
+        days,
+        message: message.trim(),
+      });
       await continueUpload(uploadFiles, session);
     } catch (uploadError) {
       if (!pausedRef.current) {
@@ -348,6 +486,27 @@ export function TransferPanel({ language }: { language: Language }) {
     if (!knownSession || pausedRef.current) return;
     const statusResponse = await fetch(`/api/uploads/${knownSession.id}`, { cache: "no-store" });
     const status = await statusResponse.json() as { files?: Array<{ id: string; uploaded: number }>; error?: string };
+    if (statusResponse.status === 404 || statusResponse.status === 410) {
+      const completeResponse = await fetch(`/api/uploads/${knownSession.id}/complete`, { method: "POST" });
+      const completed = await completeResponse.json() as UploadResult & { error?: string };
+      const encryption = encryptionRef.current;
+      if (completeResponse.ok && completed.url && encryption) {
+        setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
+        setUploadSpeed(0);
+        setResult({ ...completed, url: `${completed.url}#${encryption.fragment}` });
+        setCopied(false);
+        clearUploadRecovery();
+        sessionRef.current = null;
+        encryptionRef.current = null;
+        uploadingRef.current = false;
+        setUploading(false);
+        return;
+      }
+      clearUploadRecovery();
+      sessionRef.current = null;
+      encryptionRef.current = null;
+      throw new Error(text.recoveryUnavailable);
+    }
     if (!statusResponse.ok || !status.files) throw new Error(status.error || text.uploadFailed);
     const offsets = new Map(status.files.map((file) => [file.id, file.uploaded]));
     const encryption = encryptionRef.current;
@@ -378,6 +537,7 @@ export function TransferPanel({ language }: { language: Language }) {
       setUploadSpeed(0);
       setResult(payload);
       setCopied(false);
+      clearUploadRecovery();
       sessionRef.current = null;
       uploadingRef.current = false;
       setUploading(false);
@@ -436,6 +596,7 @@ export function TransferPanel({ language }: { language: Language }) {
       setUploadSpeed(0);
       setResult({ ...payload, url: `${payload.url}#${encryption.fragment}` });
       setCopied(false);
+      clearUploadRecovery();
       sessionRef.current = null;
       encryptionRef.current = null;
       uploadingRef.current = false;
@@ -462,9 +623,15 @@ export function TransferPanel({ language }: { language: Language }) {
     setError("");
     speedSampleRef.current = { time: performance.now(), bytes: uploadedBytes, value: 0 };
     void continueUpload().catch((uploadError) => {
-      pausedRef.current = true;
-      setPaused(true);
-      setUploadSpeed(0);
+      if (sessionRef.current) {
+        pausedRef.current = true;
+        setPaused(true);
+        setUploadSpeed(0);
+      } else {
+        uploadingRef.current = false;
+        setUploading(false);
+        setPaused(false);
+      }
       setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
     });
   }
@@ -473,6 +640,7 @@ export function TransferPanel({ language }: { language: Language }) {
     pausedRef.current = true;
     requestRef.current?.abort();
     const session = sessionRef.current;
+    clearUploadRecovery();
     sessionRef.current = null;
     encryptionRef.current = null;
     if (session) await fetch(`/api/uploads/${session.id}`, { method: "DELETE" }).catch(() => undefined);
@@ -520,6 +688,7 @@ export function TransferPanel({ language }: { language: Language }) {
     pausedRef.current = false;
     sessionRef.current = null;
     encryptionRef.current = null;
+    clearUploadRecovery();
     setError("");
   }
 
@@ -563,6 +732,19 @@ export function TransferPanel({ language }: { language: Language }) {
         </div>
         <div className="limit-pill">max. 5{"\u00a0"}GB</div>
       </div>
+
+      {recovery && (
+        <div className="upload-recovery" role="status">
+          <div>
+            <strong>{text.recoveryTitle}</strong>
+            <span>{text.recoveryBody}</span>
+          </div>
+          <div className="upload-recovery-actions">
+            <button type="button" onClick={() => inputRef.current?.click()}>{text.recoveryChoose}</button>
+            <button type="button" onClick={() => void discardRecovery()}>{text.recoveryDiscard}</button>
+          </div>
+        </div>
+      )}
 
       <input ref={inputRef} className="sr-only" type="file" multiple disabled={uploading} onChange={onFilesSelected} aria-label={text.chooseFiles} />
 
@@ -635,7 +817,7 @@ export function TransferPanel({ language }: { language: Language }) {
         <label>
           <span>{text.validFor}</span>
           <span className="select-wrap">
-            <select value={days} disabled={uploading} onChange={(event) => setDays(event.target.value)}>
+            <select value={days} disabled={uploading || Boolean(recovery)} onChange={(event) => setDays(event.target.value)}>
               <option value="1">1 {text.day}</option><option value="3">3 {text.days}</option><option value="7">7 {text.days}</option>
             </select>
             <ChevronDown size={16} aria-hidden="true" />
@@ -643,7 +825,7 @@ export function TransferPanel({ language }: { language: Language }) {
         </label>
         <label>
           <span>{text.note} <em>{text.optional}</em></span>
-          <textarea maxLength={500} rows={2} disabled={uploading} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={text.placeholder} />
+          <textarea maxLength={500} rows={2} disabled={uploading || Boolean(recovery)} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={text.placeholder} />
         </label>
       </div>
 

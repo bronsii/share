@@ -17,6 +17,13 @@ Neue Übertragungen verwenden das versionierte Format `v1`:
 
 Der unverschlüsselte Upload-Endpunkt ist deaktiviert. Bereits vorhandene ältere Freigaben ohne `encryption`-Eintrag im Manifest bleiben herunterladbar.
 
+## Bedienung
+
+- Die Oberfläche wählt Deutsch oder Englisch anhand der Browsersprache und merkt sich einen manuellen Sprachwechsel im Browser.
+- Ein laufender Upload kann pausiert und fortgesetzt werden. Nach einem versehentlichen Neuladen bleibt die verschlüsselte Sitzung im selben Browser-Tab erhalten; aus Sicherheitsgründen müssen dieselben lokalen Dateien erneut ausgewählt werden.
+- Der Browser speichert für die Wiederaufnahme nur Sitzungskennung, Schlüsselmaterial, Nonce-Basen und Dateieigenschaften im `sessionStorage`. Die eigentlichen Dateien werden niemals im Browser-Speicher abgelegt.
+- Eine verworfene Wiederaufnahme löscht die unvollständige Übertragung auch auf dem Server.
+
 ## Grenzen des Modells
 
 - Wer den vollständigen Freigabelink besitzt, besitzt auch den Schlüssel und kann die Dateien lesen.
@@ -32,6 +39,7 @@ Voraussetzung ist Node.js `>=22.13.0`.
 
 ```bash
 npm ci
+npm test
 npm run typecheck
 npm run lint
 npm run build
@@ -43,6 +51,8 @@ Produktiv setzt `SHARED_ROOT` das Datenverzeichnis. Abgelaufene und verwaiste Ü
 ```bash
 npm run cleanup
 ```
+
+Der API-interne Aufräumweg und das Wartungsskript verwenden dieselbe getestete Bereinigungsroutine, damit ihre Regeln nicht auseinanderlaufen. Mit `npm run cleanup -- --dry-run` lässt sich vorab anzeigen, was entfernt würde.
 
 Neue Uploads reservieren beim Start ihren noch benötigten Speicher. Die Reservierung schrumpft mit jedem geschriebenen Block; zusätzlich wird vor jedem Block der tatsächlich freie Speicher geprüft. 5 GiB bleiben als Sicherheitsreserve unberührt. Verschiedene Dateien dürfen parallel geschrieben werden, während ein Lock pro Zieldatei Offset-Races verhindert. Pro Client gelten höchstens zwei unvollständige Uploads, 20 GiB angekündigtes Datenvolumen pro 24 Stunden und begrenzte Parallelität. Unvollständige Uploads ohne Aktivität werden nach zwei Stunden gelöscht.
 

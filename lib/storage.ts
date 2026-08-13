@@ -2,10 +2,14 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream, type Dirent } from "node:fs";
-import { access, chmod, mkdir, readFile, readdir, rename, rm, stat, statfs, truncate, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rename, rm, stat, statfs, truncate, writeFile } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { GCM_TAG_SIZE } from "@/lib/e2e-crypto";
+import { sanitizeFileName } from "@/lib/file-name.mjs";
+import { cleanupTransfersAtRoot, INCOMPLETE_UPLOAD_MAX_IDLE_MS } from "@/lib/storage-cleanup.mjs";
+
+export { sanitizeFileName } from "@/lib/file-name.mjs";
 
 export type TransferFile = {
   id: string;
@@ -50,7 +54,6 @@ const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--((?:[a-f0-9]{20}|[a-f0-9]{32}))$/;
 const FILE_ID_PATTERN = /^(?:[a-f0-9]{20}|[a-f0-9]{32})$/;
 const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
-const INCOMPLETE_UPLOAD_MAX_IDLE_MS = 2 * 60 * 60 * 1000;
 const STORAGE_RESERVATION_PATTERN = /^[a-f0-9]{32}$/;
 const STORAGE_RESERVATION_MAX_IDLE_MS = INCOMPLETE_UPLOAD_MAX_IDLE_MS;
 
@@ -82,7 +85,7 @@ function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
 
 function transferFolder(folderName: string) {
   if (!FOLDER_PATTERN.test(folderName)) throw new Error("Ungültiger Übertragungsordner.");
-  return path.join(SHARED_ROOT, folderName);
+  return path.join(/* turbopackIgnore: true */ SHARED_ROOT, folderName);
 }
 
 function manifestPath(folderName: string) {
@@ -165,31 +168,6 @@ export function createTransferId(folderName: string) {
   return `${folderName}--${createOpaqueId()}`;
 }
 
-export function sanitizeFileName(name: string) {
-  const withoutControlCharacters = Array.from(path.basename(name), (character) =>
-    character.charCodeAt(0) < 32 ? "_" : character,
-  ).join("");
-  const baseName = withoutControlCharacters
-    .replace(/[<>:"/\\|?*]/g, "_")
-    .replace(/[. ]+$/g, "")
-    .trim();
-  return (baseName || "Datei").slice(0, 180);
-}
-
-export function uniqueStoredName(name: string, used: Set<string>) {
-  const sanitized = sanitizeFileName(name);
-  const extension = path.extname(sanitized);
-  const stem = path.basename(sanitized, extension);
-  let candidate = sanitized;
-  let counter = 2;
-  while (used.has(candidate.toLocaleLowerCase("de-DE"))) {
-    candidate = `${stem} (${counter})${extension}`;
-    counter += 1;
-  }
-  used.add(candidate.toLocaleLowerCase("de-DE"));
-  return candidate;
-}
-
 export async function getTransfer(id: string): Promise<TransferManifest | null> {
   const idMatch = TRANSFER_ID_PATTERN.exec(id);
   if (!idMatch) return null;
@@ -242,7 +220,7 @@ export async function getUploadProgress(session: UploadSession, waitForWrites = 
   return Promise.all(session.files.map(async (file) => {
     try {
       const filePath = storedFilePath(session.folderName, file.storedName);
-      const readProgress = async () => safeEncryptedUploadSize(session, file, (await stat(filePath)).size);
+      const readProgress = async () => safeEncryptedUploadSize(session, file, (await stat(/* turbopackIgnore: true */ filePath)).size);
       const uploaded = waitForWrites
         ? await withKeyedStorageLock(globalStorageState.shareUploadFileQueues!, filePath, readProgress)
         : await readProgress();
@@ -299,7 +277,7 @@ async function readStorageReservations() {
 }
 
 async function legacyUploadReservationBytes(activeReservationIds: Set<string>) {
-  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
+  const entries = await readdir(/* turbopackIgnore: true */ SHARED_ROOT, { withFileTypes: true });
   let reservedBytes = 0;
   for (const entry of entries) {
     if (!entry.isDirectory() || !FOLDER_PATTERN.test(entry.name)) continue;
@@ -448,7 +426,7 @@ export async function prepareTransferFolder(folderName: string) {
 
 export function storedFilePath(folderName: string, storedName: string) {
   if (sanitizeFileName(storedName) !== storedName) throw new Error("Ungültiger Dateiname.");
-  return path.join(transferFolder(folderName), storedName);
+  return path.join(/* turbopackIgnore: true */ transferFolder(folderName), storedName);
 }
 
 export async function writeTransferManifest(manifest: TransferManifest) {
@@ -521,11 +499,11 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
       }
     }
 
-    const folderStat = await stat(folder);
+    const folderStat = await stat(/* turbopackIgnore: true */ folder);
     if (metadata) {
       const files = await Promise.all(metadata.files.map(async (file) => {
         try {
-          return { id: file.id, name: file.name, size: (await stat(storedFilePath(folderName, file.storedName))).size };
+          return { id: file.id, name: file.name, size: (await stat(/* turbopackIgnore: true */ storedFilePath(folderName, file.storedName))).size };
         } catch {
           return { id: file.id, name: file.name, size: 0 };
         }
@@ -544,10 +522,14 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
       };
     }
 
-    const rawEntries = await readdir(folder, { withFileTypes: true });
+    const rawEntries = await readdir(/* turbopackIgnore: true */ folder, { withFileTypes: true });
     const files = await Promise.all(rawEntries
       .filter((file) => file.isFile() && !file.name.endsWith(".json") && !file.name.endsWith(".tmp"))
-      .map(async (file) => ({ id: null, name: file.name, size: (await stat(path.join(folder, file.name))).size })));
+      .map(async (file) => ({
+        id: null,
+        name: file.name,
+        size: (await stat(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ folder, file.name))).size,
+      })));
     return {
       folderName,
       id: null,
@@ -567,7 +549,7 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
 
 export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
   await mkdir(SHARED_ROOT, { recursive: true });
-  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
+  const entries = await readdir(/* turbopackIgnore: true */ SHARED_ROOT, { withFileTypes: true });
   const transfers = await Promise.all(entries
     .filter((entry) => entry.isDirectory() && FOLDER_PATTERN.test(entry.name))
     .map(adminTransferFromEntry));
@@ -579,7 +561,7 @@ export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
 
 export async function countIncompleteUploadSessions(ownerKey?: string) {
   await mkdir(SHARED_ROOT, { recursive: true, mode: 0o700 });
-  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
+  const entries = await readdir(/* turbopackIgnore: true */ SHARED_ROOT, { withFileTypes: true });
   let count = 0;
   for (const entry of entries) {
     if (!entry.isDirectory() || !FOLDER_PATTERN.test(entry.name)) continue;
@@ -599,9 +581,9 @@ export async function getStoredFile(transferId: string, fileId: string) {
   if (!manifest) return null;
   const file = manifest.files.find((item) => item.id === fileId);
   if (!file) return null;
-  const filePath = path.join(transferFolder(manifest.folderName), file.storedName);
+  const filePath = storedFilePath(manifest.folderName, file.storedName);
   try {
-    const fileStat = await stat(filePath);
+    const fileStat = await stat(/* turbopackIgnore: true */ filePath);
     return { path: filePath, size: fileStat.size };
   } catch {
     return null;
@@ -617,40 +599,5 @@ export async function deleteTransfer(manifest: TransferManifest) {
 }
 
 export async function cleanupExpiredTransfers() {
-  await mkdir(SHARED_ROOT, { recursive: true });
-  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !FOLDER_PATTERN.test(entry.name)) continue;
-    try {
-      let manifest: TransferManifest | null = null;
-      try {
-        await access(manifestPath(entry.name));
-        manifest = JSON.parse(await readFile(manifestPath(entry.name), "utf8")) as TransferManifest;
-      } catch {
-        // Uploads ohne Manifest sind noch unvollständig oder wurden abgebrochen.
-      }
-
-      if (manifest) {
-        if (transferIsExpired(manifest)) await deleteTransfer(manifest);
-        continue;
-      }
-
-      const folder = transferFolder(entry.name);
-      const folderStat = await stat(folder);
-      const children = await readdir(folder, { withFileTypes: true });
-      const childTimes = await Promise.all(children.map(async (child) => {
-        try {
-          return (await stat(path.join(folder, child.name))).mtimeMs;
-        } catch {
-          return 0;
-        }
-      }));
-      const newestActivity = Math.max(folderStat.mtimeMs, ...childTimes);
-      if (Date.now() - newestActivity >= INCOMPLETE_UPLOAD_MAX_IDLE_MS) {
-        await removeTransferFolder(entry.name);
-      }
-    } catch {
-      // Nicht lesbare oder gerade veränderte Ordner werden beim nächsten Lauf erneut geprüft.
-    }
-  }
+  await cleanupTransfersAtRoot({ sharedRoot: SHARED_ROOT });
 }

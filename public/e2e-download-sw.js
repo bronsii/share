@@ -24,7 +24,10 @@ self.addEventListener("fetch", (event) => {
   const download = downloads.get(match[1]);
   downloads.delete(match[1]);
   if (!download) {
-    event.respondWith(new Response("Der sichere Download konnte nicht gestartet werden. Bitte versuche es erneut.", {
+    const errorMessage = url.searchParams.get("lang") === "en"
+      ? "The secure download could not start. Please try again."
+      : "Der sichere Download konnte nicht gestartet werden. Bitte versuche es erneut.";
+    event.respondWith(new Response(errorMessage, {
       status: 410,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",

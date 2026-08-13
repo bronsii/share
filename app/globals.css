@@ -311,6 +311,34 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 
+.upload-recovery {
+  margin-top: 20px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid #edc998;
+  border-radius: 13px;
+  color: #684839;
+  background: #fff5e7;
+}
+.upload-recovery strong, .upload-recovery span { display: block; }
+.upload-recovery strong { margin-bottom: 4px; font-size: 12px; }
+.upload-recovery span { color: #806655; font-size: 10.5px; line-height: 1.45; }
+.upload-recovery-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.upload-recovery-actions button {
+  min-height: 33px;
+  padding: 0 10px;
+  border: 1px solid #dfb276;
+  border-radius: 8px;
+  color: #6f381d;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.upload-recovery-actions button:last-child { border-color: transparent; color: #963d24; background: transparent; }
+.upload-recovery-actions button:hover { background: #ffead2; }
+
 .dropzone {
   min-height: 117px;
   margin-top: 22px;
