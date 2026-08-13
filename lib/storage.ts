@@ -78,6 +78,8 @@ type StorageReservation = {
 export class InsufficientStorageError extends Error {}
 export class UploadOffsetConflictError extends Error {}
 export class UploadIncompleteError extends Error {}
+export class UploadFileRemovedError extends Error {}
+export class UploadLastFileError extends Error {}
 
 function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -194,6 +196,17 @@ export async function writeUploadSession(session: UploadSession) {
   await writeFile(uploadSessionPath(session.folderName), JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
 }
 
+async function replaceUploadSession(session: UploadSession) {
+  const finalPath = uploadSessionPath(session.folderName);
+  const temporaryPath = `${finalPath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await rename(temporaryPath, finalPath);
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
 export async function getUploadFile(transferId: string, fileId: string) {
   if (!FILE_ID_PATTERN.test(fileId)) return null;
   const session = await getUploadSession(transferId);
@@ -308,8 +321,14 @@ export async function appendUploadChunk(
   temporaryPath: string,
   expectedOffset: number,
   length: number,
+  uploadIdentity: { transferId: string; fileId: string },
 ) {
   return withKeyedStorageLock(globalStorageState.shareUploadFileQueues!, targetPath, async () => {
+    const activeSession = await getUploadSession(uploadIdentity.transferId);
+    const activeFile = activeSession?.files.find((file) => file.id === uploadIdentity.fileId);
+    if (!activeSession || !activeFile || storedFilePath(activeSession.folderName, activeFile.storedName) !== targetPath) {
+      throw new UploadFileRemovedError("Die Datei wurde aus dem Upload entfernt.");
+    }
     let currentSize = 0;
     try {
       currentSize = (await stat(targetPath)).size;
@@ -391,6 +410,42 @@ export async function releaseStorageReservation(id: string | undefined) {
   if (!id || !STORAGE_RESERVATION_PATTERN.test(id)) return;
   await withKeyedStorageLock(globalStorageState.shareStorageReservationQueues!, id, async () => {
     await rm(storageReservationPath(id), { force: true });
+  });
+}
+
+export async function removeUploadFile(transferId: string, fileId: string, encryptedMetadata: string) {
+  if (!FILE_ID_PATTERN.test(fileId)) return null;
+  return withKeyedStorageLock(globalStorageState.shareUploadFinalizationQueues!, transferId, async () => {
+    const session = await getUploadSession(transferId);
+    if (!session) return null;
+    const file = session.files.find((item) => item.id === fileId);
+    if (!file) return { session, progress: await getUploadProgress(session, true) };
+    if (session.files.length <= 1) throw new UploadLastFileError("Die letzte Datei kann nur zusammen mit dem Upload gelöscht werden.");
+    if (!session.encryption) throw new Error("Die Upload-Metadaten können nicht aktualisiert werden.");
+
+    const filePath = storedFilePath(session.folderName, file.storedName);
+    let uploaded = 0;
+    const nextSession = await withKeyedStorageLock(globalStorageState.shareUploadFileQueues!, filePath, async () => {
+      const currentSession = await getUploadSession(transferId);
+      const currentFile = currentSession?.files.find((item) => item.id === fileId);
+      if (!currentSession || !currentFile) return currentSession;
+      try {
+        uploaded = safeEncryptedUploadSize(currentSession, currentFile, (await stat(filePath)).size);
+      } catch (error) {
+        if (!isMissingPathError(error)) throw error;
+      }
+      const updatedSession: UploadSession = {
+        ...currentSession,
+        files: currentSession.files.filter((item) => item.id !== fileId),
+        encryption: { ...currentSession.encryption!, metadata: encryptedMetadata },
+      };
+      await replaceUploadSession(updatedSession);
+      await rm(filePath, { force: true }).catch((error) => console.error("Removed upload file could not be deleted", error));
+      return updatedSession;
+    });
+    if (!nextSession) return null;
+    await consumeStorageReservation(session.storageReservationId, Math.max(0, file.size - uploaded));
+    return { session: nextSession, progress: await getUploadProgress(nextSession, true) };
   });
 }
 

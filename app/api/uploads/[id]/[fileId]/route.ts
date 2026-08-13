@@ -8,6 +8,9 @@ import {
   consumeStorageReservation,
   getUploadFile,
   InsufficientStorageError,
+  removeUploadFile,
+  UploadFileRemovedError,
+  UploadLastFileError,
   UploadOffsetConflictError,
 } from "@/lib/storage";
 import {
@@ -16,6 +19,8 @@ import {
   consumeRateLimit,
   ProxyConfigurationError,
   proxyConfigurationUnavailable,
+  readJsonBody,
+  RequestBodyTooLargeError,
 } from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +30,10 @@ const MAX_CHUNK_SIZE = 8 * 1024 ** 2;
 const MAX_CHUNK_REQUESTS_PER_HOUR = 3000;
 const MAX_CONCURRENT_CHUNKS_PER_CLIENT = 3;
 const MAX_CONCURRENT_CHUNKS_GLOBAL = 16;
+const MAX_REMOVE_REQUEST_BYTES = 64 * 1024;
 type Context = { params: Promise<{ id: string; fileId: string }> };
+
+type RemoveFileRequest = { encryption?: { version?: number; metadata?: string } };
 
 export async function PUT(request: Request, context: Context) {
   let clientKey: string;
@@ -97,7 +105,7 @@ export async function PUT(request: Request, context: Context) {
       createWriteStream(temporaryPath, { flags: "wx", mode: 0o600 }),
     );
     if (received !== length || (await stat(temporaryPath)).size !== length) throw new Error("Dateiabschnitt ist unvollständig.");
-    const uploaded = await appendUploadChunk(target.path, temporaryPath, offset, length);
+    const uploaded = await appendUploadChunk(target.path, temporaryPath, offset, length, { transferId: id, fileId });
     if (uploaded > target.file.size) throw new Error("Datei ist gr\u00f6\u00dfer als erwartet.");
     await consumeStorageReservation(target.session.storageReservationId, uploaded - target.uploaded).catch((error) => {
       console.error("Storage reservation update failed", error);
@@ -109,6 +117,9 @@ export async function PUT(request: Request, context: Context) {
       const current = await getUploadFile(id, fileId);
       return NextResponse.json({ error: "Upload-Position stimmt nicht überein.", uploaded: current?.uploaded ?? 0 }, { status: 409 });
     }
+    if (error instanceof UploadFileRemovedError) {
+      return NextResponse.json({ error: error.message }, { status: 410 });
+    }
     if (error instanceof InsufficientStorageError) {
       return NextResponse.json({ error: error.message }, { status: 507 });
     }
@@ -117,5 +128,41 @@ export async function PUT(request: Request, context: Context) {
   } finally {
     releaseChunkSlot();
     if (temporaryPath) await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+export async function DELETE(request: Request, context: Context) {
+  const { id, fileId } = await context.params;
+  try {
+    const body = await readJsonBody<RemoveFileRequest>(request, MAX_REMOVE_REQUEST_BYTES);
+    if (body.encryption?.version !== 1
+      || typeof body.encryption.metadata !== "string"
+      || !/^[A-Za-z0-9_-]{40,50000}$/u.test(body.encryption.metadata)) {
+      return NextResponse.json({ error: "Ungültige Verschlüsselungsdaten." }, { status: 400 });
+    }
+    const result = await removeUploadFile(id, fileId, body.encryption.metadata);
+    if (!result) return NextResponse.json({ error: "Upload nicht gefunden." }, { status: 404 });
+    return NextResponse.json({
+      id: result.session.id,
+      expiresAt: result.session.expiresAt,
+      files: result.session.files.map((file, index) => ({
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        uploaded: result.progress[index]?.uploaded ?? 0,
+      })),
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    if (error instanceof UploadLastFileError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "Die Anfrage ist zu groß." }, { status: 413 });
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Ungültige Anfrage." }, { status: 400 });
+    }
+    console.error("Upload file removal failed", error);
+    return NextResponse.json({ error: "Die Datei konnte nicht aus dem Upload entfernt werden." }, { status: 500 });
   }
 }
