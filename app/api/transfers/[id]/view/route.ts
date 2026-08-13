@@ -1,12 +1,23 @@
 import { getTransfer, incrementTransferStat, transferIsExpired } from "@/lib/storage";
-import { clientRateLimitKey, consumeRateLimit } from "@/lib/request-security";
+import {
+  clientRateLimitKey,
+  consumeRateLimit,
+  ProxyConfigurationError,
+  proxyConfigurationUnavailable,
+} from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const clientKey = await clientRateLimitKey(request);
+  let clientKey: string;
+  try {
+    clientKey = await clientRateLimitKey(request);
+  } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
+    throw error;
+  }
   const [generalLimit, transferLimit] = await Promise.all([
     consumeRateLimit({ scope: "transfer-views-hour", key: clientKey, limit: 240, windowMs: 60 * 60 * 1000 }),
     consumeRateLimit({ scope: "transfer-view-day", key: `${clientKey}:${id}`, limit: 20, windowMs: 24 * 60 * 60 * 1000 }),

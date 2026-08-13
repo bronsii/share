@@ -63,7 +63,7 @@ async function ensureDownloadWorker() {
 function createExactReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
   let current: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
   let currentOffset = 0;
-  return async (length: number) => {
+  return async (length: number, onReadProgress?: () => void) => {
     const result = new Uint8Array(length);
     let written = 0;
     while (written < length) {
@@ -72,6 +72,7 @@ function createExactReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
         if (next.done) throw new Error("Der verschlüsselte Download ist unvollständig.");
         current = next.value;
         currentOffset = 0;
+        onReadProgress?.();
       }
       const available = current.byteLength - currentOffset;
       const take = Math.min(available, length - written);
@@ -193,7 +194,10 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
                 return;
               }
               const plaintextLength = Math.min(PLAINTEXT_CHUNK_SIZE, fileMetadata.size - plaintextOffset);
-              const ciphertext = await readExactly(plaintextLength + GCM_TAG_SIZE);
+              const ciphertext = await readExactly(
+                plaintextLength + GCM_TAG_SIZE,
+                () => armCompletionTimeout(DOWNLOAD_IDLE_TIMEOUT_MS, "Der Download antwortet nicht mehr. Bitte versuche es erneut."),
+              );
               const plaintext = await decryptChunk(key, noncePrefix, chunkIndex, ciphertext);
               if (finished) return;
               plaintextOffset += plaintext.byteLength;

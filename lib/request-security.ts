@@ -35,10 +35,11 @@ const globalSecurityState = globalThis as typeof globalThis & {
   shareRateLimitSecret?: Promise<Buffer>;
   shareRateLimitLastPrune?: number;
   shareRequestSlots?: Map<string, number>;
-  shareProxyConfigurationWarningShown?: boolean;
+  shareProxyConfigurationWarnings?: Set<string>;
 };
 globalSecurityState.shareRateLimitQueues ??= new Map();
 globalSecurityState.shareRequestSlots ??= new Map();
+globalSecurityState.shareProxyConfigurationWarnings ??= new Set();
 
 async function withRateLimitLock<T>(bucketName: string, operation: () => Promise<T>) {
   const queues = globalSecurityState.shareRateLimitQueues!;
@@ -91,11 +92,18 @@ async function loadRateLimitSecret() {
 export class ProxyConfigurationError extends Error {}
 
 function failProxyConfiguration(message: string): never {
-  if (!globalSecurityState.shareProxyConfigurationWarningShown) {
-    globalSecurityState.shareProxyConfigurationWarningShown = true;
+  if (!globalSecurityState.shareProxyConfigurationWarnings!.has(message)) {
+    globalSecurityState.shareProxyConfigurationWarnings!.add(message);
     console.error(`Share proxy configuration error: ${message}`);
   }
   throw new ProxyConfigurationError(message);
+}
+
+export function proxyConfigurationUnavailable() {
+  return Response.json(
+    { error: "Der Reverse Proxy ist nicht korrekt mit Share verbunden." },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 function proxyHeadersAreTrusted(request: Request) {

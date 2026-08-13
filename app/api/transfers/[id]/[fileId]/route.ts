@@ -1,7 +1,13 @@
 import { deleteTransfer, getStoredFile, getTransfer, incrementTransferStat } from "@/lib/storage";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
-import { acquireRequestSlot, clientRateLimitKey, consumeRateLimit } from "@/lib/request-security";
+import {
+  acquireRequestSlot,
+  clientRateLimitKey,
+  consumeRateLimit,
+  ProxyConfigurationError,
+  proxyConfigurationUnavailable,
+} from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,7 +24,13 @@ function safeDisposition(name: string) {
 
 export async function GET(request: Request, context: { params: Promise<{ id: string; fileId: string }> }) {
   const { id, fileId } = await context.params;
-  const clientKey = await clientRateLimitKey(request);
+  let clientKey: string;
+  try {
+    clientKey = await clientRateLimitKey(request);
+  } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
+    throw error;
+  }
   const lookupLimit = await consumeRateLimit({
     scope: "download-lookups-hour",
     key: clientKey,

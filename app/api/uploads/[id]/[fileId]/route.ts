@@ -10,7 +10,13 @@ import {
   InsufficientStorageError,
   UploadOffsetConflictError,
 } from "@/lib/storage";
-import { acquireRequestSlot, clientRateLimitKey, consumeRateLimit } from "@/lib/request-security";
+import {
+  acquireRequestSlot,
+  clientRateLimitKey,
+  consumeRateLimit,
+  ProxyConfigurationError,
+  proxyConfigurationUnavailable,
+} from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +28,13 @@ const MAX_CONCURRENT_CHUNKS_GLOBAL = 16;
 type Context = { params: Promise<{ id: string; fileId: string }> };
 
 export async function PUT(request: Request, context: Context) {
-  const clientKey = await clientRateLimitKey(request);
+  let clientKey: string;
+  try {
+    clientKey = await clientRateLimitKey(request);
+  } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
+    throw error;
+  }
   const requestLimit = await consumeRateLimit({
     scope: "upload-chunks-hour",
     key: clientKey,
