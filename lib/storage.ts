@@ -262,7 +262,8 @@ function safeEncryptedUploadSize(session: UploadSession, file: TransferFile, upl
 
 async function readStorageReservations() {
   const reservationRoot = storageReservationRoot();
-  await mkdir(reservationRoot, { recursive: true });
+  await mkdir(reservationRoot, { recursive: true, mode: 0o700 });
+  await chmod(reservationRoot, 0o700).catch(() => undefined);
   const entries = await readdir(reservationRoot, { withFileTypes: true });
   const activeIds = new Set<string>();
   let reservedBytes = 0;

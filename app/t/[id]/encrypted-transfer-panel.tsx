@@ -14,6 +14,8 @@ import {
 
 type EncryptedFile = { id: string; size: number; plaintextSize: number };
 type Props = { id: string; encryptedMetadata: string; files: EncryptedFile[]; expiresAt: string };
+const DOWNLOAD_START_TIMEOUT_MS = 15_000;
+const DOWNLOAD_IDLE_TIMEOUT_MS = 120_000;
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -122,6 +124,7 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
     setProgress(0);
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let port: MessagePort | null = null;
+    let completionTimeout: number | null = null;
     try {
       const worker = await ensureDownloadWorker();
       if (!worker) throw new Error("Download-Dienst ist nicht verfügbar.");
@@ -154,17 +157,37 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
       let plaintextOffset = 0;
       let finished = false;
       const completion = new Promise<void>((resolve, reject) => {
+        const clearCompletionTimeout = () => {
+          if (completionTimeout !== null) window.clearTimeout(completionTimeout);
+          completionTimeout = null;
+        };
+        const armCompletionTimeout = (delay: number, message: string) => {
+          clearCompletionTimeout();
+          completionTimeout = window.setTimeout(() => {
+            if (finished) return;
+            finished = true;
+            const timeoutError = new Error(message);
+            port?.postMessage({ type: "error", message });
+            void reader?.cancel();
+            reject(timeoutError);
+          }, delay);
+        };
+        armCompletionTimeout(DOWNLOAD_START_TIMEOUT_MS, "Der Download konnte nicht gestartet werden. Bitte versuche es erneut.");
         port!.onmessage = ({ data }) => {
           if (data?.type === "cancel") {
+            finished = true;
+            clearCompletionTimeout();
             void reader?.cancel();
             reject(new Error("Download wurde abgebrochen."));
             return;
           }
           if (data?.type !== "pull" || finished) return;
+          armCompletionTimeout(DOWNLOAD_IDLE_TIMEOUT_MS, "Der Download antwortet nicht mehr. Bitte versuche es erneut.");
           void (async () => {
             try {
               if (plaintextOffset >= fileMetadata.size) {
                 finished = true;
+                clearCompletionTimeout();
                 port!.postMessage({ type: "done" });
                 resolve();
                 return;
@@ -172,12 +195,16 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
               const plaintextLength = Math.min(PLAINTEXT_CHUNK_SIZE, fileMetadata.size - plaintextOffset);
               const ciphertext = await readExactly(plaintextLength + GCM_TAG_SIZE);
               const plaintext = await decryptChunk(key, noncePrefix, chunkIndex, ciphertext);
+              if (finished) return;
               plaintextOffset += plaintext.byteLength;
               chunkIndex += 1;
               setProgress(Math.min(100, Math.round((plaintextOffset / fileMetadata.size) * 100)));
               port!.postMessage({ type: "chunk", chunk: plaintext }, [plaintext]);
+              armCompletionTimeout(DOWNLOAD_IDLE_TIMEOUT_MS, "Der Download antwortet nicht mehr. Bitte versuche es erneut.");
             } catch (downloadError) {
+              if (finished) return;
               finished = true;
+              clearCompletionTimeout();
               const message = downloadError instanceof Error ? downloadError.message : "Entschlüsselung fehlgeschlagen.";
               port!.postMessage({ type: "error", message });
               reject(downloadError);
@@ -187,7 +214,7 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
       });
       const anchor = document.createElement("a");
       anchor.href = `/e2e-download/${token}`;
-      anchor.download = fileMetadata.name;
+      anchor.download = "";
       anchor.hidden = true;
       document.body.append(anchor);
       anchor.click();
@@ -196,6 +223,7 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
     } catch (downloadError) {
       setError(downloadError instanceof Error ? downloadError.message : "Der Download konnte nicht entschlüsselt werden.");
     } finally {
+      if (completionTimeout !== null) window.clearTimeout(completionTimeout);
       port?.close();
       await reader?.cancel().catch(() => undefined);
       setDownloading(null);

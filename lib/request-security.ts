@@ -35,6 +35,7 @@ const globalSecurityState = globalThis as typeof globalThis & {
   shareRateLimitSecret?: Promise<Buffer>;
   shareRateLimitLastPrune?: number;
   shareRequestSlots?: Map<string, number>;
+  shareProxyConfigurationWarningShown?: boolean;
 };
 globalSecurityState.shareRateLimitQueues ??= new Map();
 globalSecurityState.shareRequestSlots ??= new Map();
@@ -87,20 +88,37 @@ async function loadRateLimitSecret() {
   return globalSecurityState.shareRateLimitSecret;
 }
 
+export class ProxyConfigurationError extends Error {}
+
+function failProxyConfiguration(message: string): never {
+  if (!globalSecurityState.shareProxyConfigurationWarningShown) {
+    globalSecurityState.shareProxyConfigurationWarningShown = true;
+    console.error(`Share proxy configuration error: ${message}`);
+  }
+  throw new ProxyConfigurationError(message);
+}
+
 function proxyHeadersAreTrusted(request: Request) {
   const expected = process.env.SHARE_PROXY_SECRET;
   const supplied = request.headers.get(PROXY_SECRET_HEADER);
-  if (!expected || expected.length < 32 || !supplied) return false;
+  if (!expected || expected.length < 32) {
+    if (process.env.NODE_ENV !== "production") return false;
+    return failProxyConfiguration("SHARE_PROXY_SECRET fehlt oder ist kürzer als 32 Zeichen.");
+  }
+  if (!supplied) return failProxyConfiguration("Der Reverse Proxy hat kein X-Share-Proxy-Secret übermittelt.");
   const expectedBytes = Buffer.from(expected);
   const suppliedBytes = Buffer.from(supplied);
-  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
+  if (expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) {
+    return failProxyConfiguration("SHARE_PROXY_SECRET stimmt zwischen Share und Reverse Proxy nicht überein.");
+  }
+  return true;
 }
 
 function clientAddress(request: Request) {
-  if (!proxyHeadersAreTrusted(request)) return "unknown";
+  if (!proxyHeadersAreTrusted(request)) return "development";
   const suppliedAddress = request.headers.get(PROXY_CLIENT_IP_HEADER)?.trim();
   if (suppliedAddress && isIP(suppliedAddress)) return suppliedAddress;
-  return "unknown";
+  return failProxyConfiguration("Der Reverse Proxy hat keine gültige Client-IP übermittelt.");
 }
 
 function lastForwardedValue(value: string | null) {
@@ -213,7 +231,8 @@ export function requestHasSameOrigin(request: Request) {
     const forwardedProtocol = trustProxy ? lastForwardedValue(request.headers.get("x-forwarded-proto")) : undefined;
     const protocol = forwardedProtocol ? `${forwardedProtocol}:` : new URL(request.url).protocol;
     return origin.protocol === protocol && origin.host === host;
-  } catch {
+  } catch (error) {
+    if (error instanceof ProxyConfigurationError) throw error;
     return false;
   }
 }

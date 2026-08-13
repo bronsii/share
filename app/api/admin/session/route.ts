@@ -10,6 +10,7 @@ import {
   clientRateLimitKey,
   consumeRateLimit,
   globalRateLimitKey,
+  ProxyConfigurationError,
   readJsonBody,
   requestHasSameOrigin,
   RequestBodyTooLargeError,
@@ -30,6 +31,13 @@ function tooManyAttempts(retryAfter: number) {
   );
 }
 
+function proxyUnavailable() {
+  return NextResponse.json(
+    { error: "Der Reverse Proxy ist nicht korrekt mit Share verbunden." },
+    { status: 503, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 export async function GET(request: Request) {
   return NextResponse.json(
     { authenticated: adminRequestIsAuthenticated(request) },
@@ -38,11 +46,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!requestHasSameOrigin(request)) {
-    return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
-  }
-
   try {
+    if (!requestHasSameOrigin(request)) {
+      return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
     const clientKey = await clientRateLimitKey(request);
     const [clientLimit, globalLimit] = await Promise.all([
       consumeRateLimit({ scope: "admin-login-client", key: clientKey, limit: MAX_ATTEMPTS, windowMs: WINDOW_MS }),
@@ -73,6 +80,7 @@ export async function POST(request: Request) {
     });
     return response;
   } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyUnavailable();
     if (error instanceof RequestBodyTooLargeError) {
       return NextResponse.json({ error: "Die Anfrage ist zu groß." }, { status: 413, headers: { "Cache-Control": "no-store" } });
     }
@@ -88,8 +96,13 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!requestHasSameOrigin(request)) {
-    return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  try {
+    if (!requestHasSameOrigin(request)) {
+      return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
+  } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyUnavailable();
+    throw error;
   }
   const response = NextResponse.json({ authenticated: false }, { headers: { "Cache-Control": "no-store" } });
   response.cookies.set(ADMIN_COOKIE_NAME, "", {

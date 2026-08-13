@@ -46,7 +46,7 @@ npm run cleanup
 
 Neue Uploads reservieren beim Start ihren noch benötigten Speicher. Die Reservierung schrumpft mit jedem geschriebenen Block; zusätzlich wird vor jedem Block der tatsächlich freie Speicher geprüft. 5 GiB bleiben als Sicherheitsreserve unberührt. Verschiedene Dateien dürfen parallel geschrieben werden, während ein Lock pro Zieldatei Offset-Races verhindert. Pro Client gelten höchstens zwei unvollständige Uploads, 20 GiB angekündigtes Datenvolumen pro 24 Stunden und begrenzte Parallelität. Unvollständige Uploads ohne Aktivität werden nach zwei Stunden gelöscht.
 
-`SHARE_PROXY_SECRET` muss aus mindestens 32 zufälligen Zeichen bestehen und in Share sowie Caddy identisch gesetzt sein. Der Produktionsdienst lauscht ausschließlich auf `127.0.0.1`; die App darf nicht direkt ins Internet exponiert werden.
+`SHARE_PROXY_SECRET` muss aus mindestens 32 zufälligen Zeichen bestehen und in Share sowie Caddy identisch gesetzt sein. Fehlt das Geheimnis beim Produktionsstart, startet die systemd-Unit nicht. Fehlt der vertrauenswürdige Header oder unterscheidet sich das Geheimnis im laufenden Betrieb, verwirft Share betroffene API-Anfragen, statt alle Clients still unter einem gemeinsamen Rate-Limit-Schlüssel zusammenzufassen. Der Produktionsdienst lauscht ausschließlich auf `127.0.0.1`; die App darf nicht direkt ins Internet exponiert werden.
 
 `SHARE_ADMIN_CODE` muss als lange, einzigartige Passphrase gesetzt werden. Admin-Anmeldeversuche werden persistent pro Client und global begrenzt. Die Session-Cookies sind `Secure`, `HttpOnly`, `SameSite=Strict`, auf den Host gebunden und zwei Stunden gültig.
 

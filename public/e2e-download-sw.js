@@ -24,7 +24,15 @@ self.addEventListener("fetch", (event) => {
   const download = downloads.get(match[1]);
   downloads.delete(match[1]);
   if (!download) {
-    event.respondWith(new Response("Download nicht gefunden.", { status: 404 }));
+    event.respondWith(new Response("Der sichere Download konnte nicht gestartet werden. Bitte versuche es erneut.", {
+      status: 410,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": "attachment; filename=share-download-error.txt",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    }));
     return;
   }
 

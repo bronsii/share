@@ -22,7 +22,7 @@ printf '[Service]\nEnvironmentFile=/etc/share-proxy.env\n' | sudo tee /etc/syste
 sudo systemctl daemon-reload
 ```
 
-`/etc/share-proxy.env` muss ausschließlich für Root lesbar bleiben. Nach einer Rotation werden sowohl `share.service` als auch `caddy.service` neu gestartet.
+`/etc/share-proxy.env` muss ausschließlich für Root lesbar bleiben. Nach einer Rotation werden sowohl `share.service` als auch `caddy.service` neu gestartet. Bei einem fehlenden oder zu kurzen `SHARE_PROXY_SECRET` verweigert `share.service` den Start. Stimmen die Geheimnisse zwischen Caddy und Share nicht überein, schlagen API-Anfragen geschlossen fehl und der Fehler wird im Share-Journal protokolliert.
 
 Danach prüfen:
 
