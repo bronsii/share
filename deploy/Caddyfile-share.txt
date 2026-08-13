@@ -3,5 +3,8 @@ sendebude.de {
 	request_body {
 		max_size 8MB
 	}
-	reverse_proxy 127.0.0.1:3000
+	reverse_proxy 127.0.0.1:3000 {
+		header_up X-Share-Client-IP {remote_host}
+		header_up X-Share-Proxy-Secret {$SHARE_PROXY_SECRET}
+	}
 }

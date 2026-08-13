@@ -54,8 +54,14 @@ const STORAGE_RESERVATION_PATTERN = /^[a-f0-9]{32}$/;
 const STORAGE_RESERVATION_MAX_IDLE_MS = INCOMPLETE_UPLOAD_MAX_IDLE_MS;
 
 const transferStatUpdates = new Map<string, Promise<boolean>>();
-const globalStorageState = globalThis as typeof globalThis & { shareStorageCapacityQueue?: Promise<void> };
+const globalStorageState = globalThis as typeof globalThis & {
+  shareStorageCapacityQueue?: Promise<void>;
+  shareUploadFileQueues?: Map<string, Promise<void>>;
+  shareStorageReservationQueues?: Map<string, Promise<void>>;
+};
 globalStorageState.shareStorageCapacityQueue ??= Promise.resolve();
+globalStorageState.shareUploadFileQueues ??= new Map();
+globalStorageState.shareStorageReservationQueues ??= new Map();
 
 type StorageReservation = {
   id: string;
@@ -108,6 +114,27 @@ async function withStorageCapacityLock<T>(operation: () => Promise<T>) {
     if (globalStorageState.shareStorageCapacityQueue === queued) {
       globalStorageState.shareStorageCapacityQueue = Promise.resolve();
     }
+  }
+}
+
+async function withKeyedStorageLock<T>(
+  queues: Map<string, Promise<void>>,
+  key: string,
+  operation: () => Promise<T>,
+) {
+  const previous = queues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => current);
+  queues.set(key, queued);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (queues.get(key) === queued) queues.delete(key);
   }
 }
 
@@ -286,26 +313,13 @@ async function updateStorageReservation(reservation: StorageReservation) {
   await rename(temporaryPath, finalPath);
 }
 
-export async function ensureStorageCapacity(requiredBytes: number) {
-  if (!Number.isSafeInteger(requiredBytes) || requiredBytes <= 0) throw new Error("Ungültige Uploadgröße.");
-  return withStorageCapacityLock(async () => {
-    await mkdir(SHARED_ROOT, { recursive: true, mode: 0o700 });
-    await chmod(SHARED_ROOT, 0o700).catch(() => undefined);
-    const fileSystem = await statfs(SHARED_ROOT);
-    const availableBytes = fileSystem.bavail * fileSystem.bsize;
-    if (!Number.isSafeInteger(availableBytes) || availableBytes < requiredBytes + STORAGE_RESERVE_BYTES) {
-      throw new InsufficientStorageError("Auf der VPS ist nicht genug freier Speicher für diese Übertragung.");
-    }
-  });
-}
-
 export async function appendUploadChunk(
   targetPath: string,
   temporaryPath: string,
   expectedOffset: number,
   length: number,
 ) {
-  return withStorageCapacityLock(async () => {
+  return withKeyedStorageLock(globalStorageState.shareUploadFileQueues!, targetPath, async () => {
     let currentSize = 0;
     try {
       currentSize = (await stat(targetPath)).size;
@@ -367,7 +381,7 @@ export async function reserveStorageCapacity(requiredBytes: number) {
 
 export async function consumeStorageReservation(id: string | undefined, consumedBytes: number) {
   if (!id || !STORAGE_RESERVATION_PATTERN.test(id) || !Number.isSafeInteger(consumedBytes) || consumedBytes <= 0) return;
-  await withStorageCapacityLock(async () => {
+  await withKeyedStorageLock(globalStorageState.shareStorageReservationQueues!, id, async () => {
     try {
       const reservation = JSON.parse(await readFile(storageReservationPath(id), "utf8")) as StorageReservation;
       reservation.remainingBytes = Math.max(0, reservation.remainingBytes - consumedBytes);
@@ -385,7 +399,7 @@ export async function consumeStorageReservation(id: string | undefined, consumed
 
 export async function releaseStorageReservation(id: string | undefined) {
   if (!id || !STORAGE_RESERVATION_PATTERN.test(id)) return;
-  await withStorageCapacityLock(async () => {
+  await withKeyedStorageLock(globalStorageState.shareStorageReservationQueues!, id, async () => {
     await rm(storageReservationPath(id), { force: true });
   });
 }

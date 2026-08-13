@@ -11,6 +11,7 @@ WorkingDirectory=/srv/apps/share
 Environment=NODE_ENV=production
 Environment=SHARED_ROOT=/srv/apps/share/shared
 EnvironmentFile=/etc/share-admin.env
+EnvironmentFile=/etc/share-proxy.env
 ExecStart=/opt/node/bin/node /srv/apps/share/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
 Restart=on-failure
 RestartSec=5

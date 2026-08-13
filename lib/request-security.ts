@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -10,6 +10,8 @@ const SECURITY_ROOT = path.join(SHARED_ROOT, ".security");
 const RATE_LIMIT_ROOT = path.join(SECURITY_ROOT, "rate-limits");
 const RATE_LIMIT_SECRET_PATH = path.join(SECURITY_ROOT, "rate-limit.key");
 const MAX_RATE_LIMIT_FILE_AGE_MS = 2 * 24 * 60 * 60 * 1000;
+const PROXY_CLIENT_IP_HEADER = "x-share-client-ip";
+const PROXY_SECRET_HEADER = "x-share-proxy-secret";
 
 type RateLimitState = { count: number; resetAt: number };
 type RateLimitOptions = {
@@ -29,28 +31,27 @@ export type RateLimitResult = {
 };
 
 const globalSecurityState = globalThis as typeof globalThis & {
-  shareRateLimitQueue?: Promise<void>;
+  shareRateLimitQueues?: Map<string, Promise<void>>;
   shareRateLimitSecret?: Promise<Buffer>;
   shareRateLimitLastPrune?: number;
   shareRequestSlots?: Map<string, number>;
 };
-globalSecurityState.shareRateLimitQueue ??= Promise.resolve();
+globalSecurityState.shareRateLimitQueues ??= new Map();
 globalSecurityState.shareRequestSlots ??= new Map();
 
-async function withRateLimitLock<T>(operation: () => Promise<T>) {
-  const previous = globalSecurityState.shareRateLimitQueue ?? Promise.resolve();
+async function withRateLimitLock<T>(bucketName: string, operation: () => Promise<T>) {
+  const queues = globalSecurityState.shareRateLimitQueues!;
+  const previous = queues.get(bucketName) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolve) => { release = resolve; });
   const queued = previous.catch(() => undefined).then(() => current);
-  globalSecurityState.shareRateLimitQueue = queued;
+  queues.set(bucketName, queued);
   await previous.catch(() => undefined);
   try {
     return await operation();
   } finally {
     release();
-    if (globalSecurityState.shareRateLimitQueue === queued) {
-      globalSecurityState.shareRateLimitQueue = Promise.resolve();
-    }
+    if (queues.get(bucketName) === queued) queues.delete(bucketName);
   }
 }
 
@@ -86,15 +87,19 @@ async function loadRateLimitSecret() {
   return globalSecurityState.shareRateLimitSecret;
 }
 
+function proxyHeadersAreTrusted(request: Request) {
+  const expected = process.env.SHARE_PROXY_SECRET;
+  const supplied = request.headers.get(PROXY_SECRET_HEADER);
+  if (!expected || expected.length < 32 || !supplied) return false;
+  const expectedBytes = Buffer.from(expected);
+  const suppliedBytes = Buffer.from(supplied);
+  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
+}
+
 function clientAddress(request: Request) {
-  const forwardedAddresses = request.headers.get("x-forwarded-for")
-    ?.split(",")
-    .map((address) => address.trim())
-    .filter(Boolean);
-  const forwarded = forwardedAddresses?.at(-1);
-  if (forwarded && isIP(forwarded)) return forwarded;
-  const realAddress = request.headers.get("x-real-ip")?.trim();
-  if (realAddress && isIP(realAddress)) return realAddress;
+  if (!proxyHeadersAreTrusted(request)) return "unknown";
+  const suppliedAddress = request.headers.get(PROXY_CLIENT_IP_HEADER)?.trim();
+  if (suppliedAddress && isIP(suppliedAddress)) return suppliedAddress;
   return "unknown";
 }
 
@@ -161,11 +166,12 @@ export async function consumeRateLimit(options: RateLimitOptions): Promise<RateL
     throw new Error("Ungültige Rate-Limit-Konfiguration.");
   }
 
-  return withRateLimitLock(async () => {
-    await ensureSecurityDirectories();
+  await ensureSecurityDirectories();
+  await pruneExpiredRateLimits(Date.now());
+  const bucketName = await opaqueKey("bucket", `${scope}\0${key}`);
+
+  return withRateLimitLock(bucketName, async () => {
     const now = Date.now();
-    await pruneExpiredRateLimits(now);
-    const bucketName = await opaqueKey("bucket", `${scope}\0${key}`);
     const finalPath = path.join(RATE_LIMIT_ROOT, `${bucketName}.json`);
     let state: RateLimitState = { count: 0, resetAt: now + windowMs };
     try {
@@ -197,9 +203,10 @@ export function requestHasSameOrigin(request: Request) {
   if (!suppliedOrigin) return false;
   try {
     const origin = new URL(suppliedOrigin);
-    const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+    const trustProxy = proxyHeadersAreTrusted(request);
+    const forwardedHost = trustProxy ? request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() : undefined;
     const host = forwardedHost || request.headers.get("host") || new URL(request.url).host;
-    const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    const forwardedProtocol = trustProxy ? request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() : undefined;
     const protocol = forwardedProtocol ? `${forwardedProtocol}:` : new URL(request.url).protocol;
     return origin.protocol === protocol && origin.host === host;
   } catch {

@@ -22,7 +22,7 @@ Der unverschlüsselte Upload-Endpunkt ist deaktiviert. Bereits vorhandene älter
 - Wer den vollständigen Freigabelink besitzt, besitzt auch den Schlüssel und kann die Dateien lesen.
 - Ein verlorener Schlüssel kann nicht wiederhergestellt werden.
 - Der Server sieht weiterhin IP-Adressen auf Netzwerkebene, Zeitpunkte, Dateianzahl und Größen.
-- Für Missbrauchsschutz wird die Client-IP mit einem lokalen geheimen Schlüssel pseudonymisiert. Die Rate-Limit-Dateien enthalten nicht die ursprüngliche IP-Adresse und werden nach Ablauf automatisch bereinigt.
+- Für Missbrauchsschutz wird die vom vertrauenswürdigen Reverse Proxy übermittelte Client-IP mit einem lokalen geheimen Schlüssel pseudonymisiert. Die Anwendung akzeptiert diese IP nur zusammen mit dem separaten `SHARE_PROXY_SECRET`; frei gesetzte Forwarding-Header werden nicht verwendet. Die Rate-Limit-Dateien enthalten nicht die ursprüngliche IP-Adresse und werden nach Ablauf automatisch bereinigt.
 - Die Webanwendung wird vom Server ausgeliefert. Ein künftig kompromittierter Server könnte verändertes JavaScript ausliefern. Deshalb gehören sichere Deployments, eine restriktive CSP, kontrollierte Abhängigkeiten und unabhängige Sicherheitsprüfungen zum Vertrauensmodell.
 - Mehrere verschlüsselte Dateien werden derzeit einzeln heruntergeladen; der Server kann daraus mangels Schlüssel kein ZIP erstellen.
 
@@ -44,7 +44,9 @@ Produktiv setzt `SHARED_ROOT` das Datenverzeichnis. Abgelaufene und verwaiste Ü
 npm run cleanup
 ```
 
-Neue Uploads reservieren nicht mehr allein aufgrund der angekündigten Dateigröße den gesamten Speicher. Vor dem Start und vor jedem geschriebenen Block wird freier Speicher geprüft; 5 GiB bleiben als Sicherheitsreserve unberührt. Pro Client gelten höchstens zwei unvollständige Uploads, 20 GiB angekündigtes Datenvolumen pro 24 Stunden und begrenzte Parallelität. Unvollständige Uploads ohne Aktivität werden nach zwei Stunden gelöscht.
+Neue Uploads reservieren beim Start ihren noch benötigten Speicher. Die Reservierung schrumpft mit jedem geschriebenen Block; zusätzlich wird vor jedem Block der tatsächlich freie Speicher geprüft. 5 GiB bleiben als Sicherheitsreserve unberührt. Verschiedene Dateien dürfen parallel geschrieben werden, während ein Lock pro Zieldatei Offset-Races verhindert. Pro Client gelten höchstens zwei unvollständige Uploads, 20 GiB angekündigtes Datenvolumen pro 24 Stunden und begrenzte Parallelität. Unvollständige Uploads ohne Aktivität werden nach zwei Stunden gelöscht.
+
+`SHARE_PROXY_SECRET` muss aus mindestens 32 zufälligen Zeichen bestehen und in Share sowie Caddy identisch gesetzt sein. Der Produktionsdienst lauscht ausschließlich auf `127.0.0.1`; die App darf nicht direkt ins Internet exponiert werden.
 
 `SHARE_ADMIN_CODE` muss als lange, einzigartige Passphrase gesetzt werden. Admin-Anmeldeversuche werden persistent pro Client und global begrenzt. Die Session-Cookies sind `Secure`, `HttpOnly`, `SameSite=Strict`, auf den Host gebunden und zwei Stunden gültig.
 

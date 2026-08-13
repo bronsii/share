@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
+import { GCM_TAG_SIZE, PLAINTEXT_CHUNK_SIZE } from "@/lib/e2e-crypto";
 import {
   cleanupExpiredTransfers,
   countIncompleteUploadSessions,
   createFolderName,
   createOpaqueId,
   createTransferId,
-  ensureStorageCapacity,
   InsufficientStorageError,
   prepareTransferFolder,
+  releaseStorageReservation,
   removeTransferFolder,
+  reserveStorageCapacity,
   TransferFile,
   UploadSession,
   writeUploadSession,
@@ -25,8 +27,6 @@ export const runtime = "nodejs";
 
 const MAX_FILES = 20;
 const MAX_TOTAL_SIZE = 5 * 1024 ** 3;
-const PLAINTEXT_CHUNK_SIZE = 4 * 1024 ** 2;
-const GCM_TAG_SIZE = 16;
 const ALLOWED_DAYS = new Set([1, 3, 7]);
 const MAX_SESSION_ATTEMPTS_PER_HOUR = 10;
 const MAX_UPLOAD_BYTES_PER_DAY = 20 * 1024 ** 3;
@@ -70,6 +70,7 @@ export async function POST(request: Request) {
   const now = new Date();
   const folderName = createFolderName(now);
   let folderPrepared = false;
+  let storageReservationId: string | undefined;
   try {
     const ownerKey = await clientRateLimitKey(request);
     const sessionAttempts = await consumeRateLimit({
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
         throw new UploadLimitError("Das tägliche Upload-Limit ist erreicht. Bitte versuche es später erneut.", dailyBytes.retryAfter);
       }
 
-      await ensureStorageCapacity(totalSize);
+      storageReservationId = await reserveStorageCapacity(totalSize);
       await prepareTransferFolder(folderName);
       folderPrepared = true;
 
@@ -158,6 +159,7 @@ export async function POST(request: Request) {
         message: "",
         files,
         encryption: { version: 1, metadata: body.encryption!.metadata!, chunkSize: PLAINTEXT_CHUNK_SIZE },
+        storageReservationId,
         security: { ownerKey },
       };
       await writeUploadSession(nextSession);
@@ -166,6 +168,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ id: session.id, expiresAt: session.expiresAt, files: session.files.map(({ id, name, size }) => ({ id, name, size, uploaded: 0 })) }, { status: 201 });
   } catch (error) {
     if (folderPrepared) await removeTransferFolder(folderName).catch(() => undefined);
+    await releaseStorageReservation(storageReservationId).catch(() => undefined);
     if (error instanceof UploadLimitError) {
       return NextResponse.json({ error: error.message }, { status: 429, headers: { "Retry-After": String(error.retryAfter), "Cache-Control": "no-store" } });
     }
