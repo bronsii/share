@@ -399,10 +399,14 @@ a { color: inherit; text-decoration: none; }
 .upload-summary { margin-top: 14px; }
 .upload-summary-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .upload-summary-line strong { color: var(--violet-dark); font-size: 13px; }
-.upload-summary progress { width: 100%; height: 9px; margin: 8px 0 6px; overflow: hidden; border: 0; border-radius: 999px; background: #f1e4da; appearance: none; }
+.upload-progress-row { display: grid; grid-template-columns: minmax(0, 1fr) 29px; align-items: center; gap: 8px; margin: 7px 0 5px; }
+.upload-summary progress { width: 100%; height: 9px; margin: 0; overflow: hidden; border: 0; border-radius: 999px; background: #f1e4da; appearance: none; }
 .upload-summary progress::-webkit-progress-bar { background: #f1e4da; border-radius: 999px; }
 .upload-summary progress::-webkit-progress-value { background: linear-gradient(90deg, var(--violet), var(--cyan)); border-radius: 999px; }
 .upload-summary progress::-moz-progress-bar { background: linear-gradient(90deg, var(--violet), var(--cyan)); border-radius: 999px; }
+.upload-cancel-all { width: 29px; height: 29px; display: grid; place-items: center; border: 0; border-radius: 7px; color: #aaa7af; background: transparent; cursor: pointer; }
+.upload-cancel-all:hover { color: #b33b4a; background: #fff0ee; }
+.upload-cancel-all:disabled { opacity: 0.4; cursor: wait; }
 .upload-summary-details { flex-wrap: wrap; }
 
 .settings-row { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 13px; margin: 17px 0 19px; }

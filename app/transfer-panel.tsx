@@ -81,7 +81,7 @@ const translations = {
     note: "Notiz",
     optional: "optional",
     placeholder: "z. B. hier sind die Urlaubsfotos …",
-    cancelUpload: "Upload abbrechen und l\u00f6schen",
+    cancelUpload: "Gesamten Upload abbrechen und löschen",
     removeUploadingFile: (name: string) => `${name} aus diesem Upload entfernen`,
     removeFileFailed: "Die Datei konnte nicht aus dem Upload entfernt werden.",
     recoveryTitle: "Unterbrochenen Upload fortsetzen",
@@ -134,7 +134,7 @@ const translations = {
     note: "Note",
     optional: "optional",
     placeholder: "e.g. here are the holiday photos …",
-    cancelUpload: "Cancel and delete upload",
+    cancelUpload: "Cancel and delete entire upload",
     removeUploadingFile: (name: string) => `Remove ${name} from this upload`,
     removeFileFailed: "The file could not be removed from the upload.",
     recoveryTitle: "Resume interrupted upload",
@@ -254,6 +254,7 @@ export function TransferPanel({ language }: { language: Language }) {
   const sessionRef = useRef<UploadSession | null>(null);
   const encryptionRef = useRef<ClientEncryptionState | null>(null);
   const uploadGenerationRef = useRef(0);
+  const cancellingUploadRef = useRef(false);
   const speedSampleRef = useRef({ time: 0, bytes: 0, value: 0 });
   const [files, setFiles] = useState<File[]>([]);
   const [days, setDays] = useState("3");
@@ -269,6 +270,7 @@ export function TransferPanel({ language }: { language: Language }) {
   const [copied, setCopied] = useState(false);
   const [recovery, setRecovery] = useState<UploadRecovery | null>(null);
   const [removingFileKey, setRemovingFileKey] = useState<string | null>(null);
+  const [cancellingUpload, setCancellingUpload] = useState(false);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -678,6 +680,9 @@ export function TransferPanel({ language }: { language: Language }) {
   }
 
   async function cancelUpload() {
+    if (cancellingUploadRef.current) return;
+    cancellingUploadRef.current = true;
+    setCancellingUpload(true);
     uploadGenerationRef.current += 1;
     pausedRef.current = true;
     requestRef.current?.abort();
@@ -693,6 +698,8 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploadedBytes(0);
     setUploadSpeed(0);
     setError("");
+    cancellingUploadRef.current = false;
+    setCancellingUpload(false);
   }
 
   async function removeFile(index: number) {
@@ -912,11 +919,11 @@ export function TransferPanel({ language }: { language: Language }) {
                 </span>
                 <span className="file-actions">
                   {isCurrentUpload && (
-                    <button className="pause-button" type="button" disabled={Boolean(removingFileKey)} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
+                    <button className="pause-button" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
                       {paused ? <Play size={16} /> : <Pause size={16} />}
                     </button>
                   )}
-                  <button type="button" disabled={Boolean(removingFileKey) || (uploading && totalProgress >= 100)} onClick={() => void removeFile(index)} aria-label={uploading ? text.removeUploadingFile(file.name) : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
+                  <button type="button" disabled={Boolean(removingFileKey) || cancellingUpload || (uploading && totalProgress >= 100)} onClick={() => void removeFile(index)} aria-label={uploading ? text.removeUploadingFile(file.name) : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
                 </span>
               </div>
             );
@@ -930,7 +937,12 @@ export function TransferPanel({ language }: { language: Language }) {
             <strong>{totalProgress} %</strong>
             <span>{formatBytes(uploadedBytes)} / {formatBytes(totalSize)}</span>
           </div>
-          <progress max="100" value={totalProgress} aria-label={`${totalProgress} % ${text.uploaded}`} />
+          <div className="upload-progress-row">
+            <progress max="100" value={totalProgress} aria-label={`${totalProgress} % ${text.uploaded}`} />
+            <button className="upload-cancel-all" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={() => void cancelUpload()} aria-label={text.cancelUpload} title={text.cancelUpload}>
+              <Trash2 size={16} />
+            </button>
+          </div>
           <div className="upload-summary-line upload-summary-details">
             <span>{uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : paused ? "—" : "…"}</span>
             <span>{formatBytes(remainingBytes)} {text.remaining}</span>
