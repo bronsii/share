@@ -5,6 +5,7 @@ import { createReadStream, createWriteStream, type Dirent } from "node:fs";
 import { access, chmod, mkdir, readFile, readdir, rename, rm, stat, statfs, truncate, writeFile } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
+import { GCM_TAG_SIZE } from "@/lib/e2e-crypto";
 
 export type TransferFile = {
   id: string;
@@ -57,10 +58,12 @@ const transferStatUpdates = new Map<string, Promise<boolean>>();
 const globalStorageState = globalThis as typeof globalThis & {
   shareStorageCapacityQueue?: Promise<void>;
   shareUploadFileQueues?: Map<string, Promise<void>>;
+  shareUploadFinalizationQueues?: Map<string, Promise<void>>;
   shareStorageReservationQueues?: Map<string, Promise<void>>;
 };
 globalStorageState.shareStorageCapacityQueue ??= Promise.resolve();
 globalStorageState.shareUploadFileQueues ??= new Map();
+globalStorageState.shareUploadFinalizationQueues ??= new Map();
 globalStorageState.shareStorageReservationQueues ??= new Map();
 
 type StorageReservation = {
@@ -71,6 +74,7 @@ type StorageReservation = {
 
 export class InsufficientStorageError extends Error {}
 export class UploadOffsetConflictError extends Error {}
+export class UploadIncompleteError extends Error {}
 
 function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -221,32 +225,39 @@ export async function getUploadFile(transferId: string, fileId: string) {
   const filePath = storedFilePath(session.folderName, file.storedName);
   let uploaded = 0;
   try {
-    uploaded = (await stat(filePath)).size;
-    uploaded = await normalizeEncryptedUploadSize(session, file, filePath, uploaded);
-  } catch {
+    uploaded = await withKeyedStorageLock(globalStorageState.shareUploadFileQueues!, filePath, async () => {
+      const storedSize = (await stat(filePath)).size;
+      const safeSize = safeEncryptedUploadSize(session, file, storedSize);
+      if (safeSize !== storedSize) await truncate(filePath, safeSize);
+      return safeSize;
+    });
+  } catch (error) {
+    if (!isMissingPathError(error)) throw error;
     // Die Datei wird mit dem ersten Abschnitt angelegt.
   }
   return { session, file, path: filePath, uploaded };
 }
 
-export async function getUploadProgress(session: UploadSession) {
+export async function getUploadProgress(session: UploadSession, waitForWrites = false) {
   return Promise.all(session.files.map(async (file) => {
     try {
       const filePath = storedFilePath(session.folderName, file.storedName);
-      const uploaded = await normalizeEncryptedUploadSize(session, file, filePath, (await stat(filePath)).size);
+      const readProgress = async () => safeEncryptedUploadSize(session, file, (await stat(filePath)).size);
+      const uploaded = waitForWrites
+        ? await withKeyedStorageLock(globalStorageState.shareUploadFileQueues!, filePath, readProgress)
+        : await readProgress();
       return { id: file.id, uploaded };
-    } catch {
+    } catch (error) {
+      if (!isMissingPathError(error)) throw error;
       return { id: file.id, uploaded: 0 };
     }
   }));
 }
 
-async function normalizeEncryptedUploadSize(session: UploadSession, file: TransferFile, filePath: string, uploaded: number) {
+function safeEncryptedUploadSize(session: UploadSession, file: TransferFile, uploaded: number) {
   if (!session.encryption || !file.plaintextSize || uploaded === file.size) return uploaded;
-  const cipherChunkSize = session.encryption.chunkSize + 16;
-  const safeUploaded = Math.floor(uploaded / cipherChunkSize) * cipherChunkSize;
-  if (safeUploaded !== uploaded) await truncate(filePath, safeUploaded);
-  return safeUploaded;
+  const cipherChunkSize = session.encryption.chunkSize + GCM_TAG_SIZE;
+  return Math.floor(uploaded / cipherChunkSize) * cipherChunkSize;
 }
 
 async function readStorageReservations() {
@@ -405,17 +416,25 @@ export async function releaseStorageReservation(id: string | undefined) {
 }
 
 export async function finishUploadSession(session: UploadSession) {
-  const progress = await getUploadProgress(session);
-  if (progress.some((item, index) => item.uploaded !== session.files[index].size)) {
-    throw new Error("Der Upload ist noch nicht vollst\u00e4ndig.");
-  }
-  const storageReservationId = session.storageReservationId;
-  const manifest: TransferManifest & Pick<UploadSession, "storageReservationId" | "security"> = { ...session };
-  delete manifest.storageReservationId;
-  delete manifest.security;
-  await writeTransferManifest(manifest);
-  await rm(uploadSessionPath(session.folderName), { force: true });
-  await releaseStorageReservation(storageReservationId);
+  await withKeyedStorageLock(globalStorageState.shareUploadFinalizationQueues!, session.id, async () => {
+    const storageReservationId = session.storageReservationId;
+    if (await getTransfer(session.id)) {
+      await rm(uploadSessionPath(session.folderName), { force: true });
+      await releaseStorageReservation(storageReservationId);
+      return;
+    }
+
+    const progress = await getUploadProgress(session, true);
+    if (progress.some((item, index) => item.uploaded !== session.files[index].size)) {
+      throw new UploadIncompleteError("Der Upload ist noch nicht vollst\u00e4ndig.");
+    }
+    const manifest: TransferManifest & Pick<UploadSession, "storageReservationId" | "security"> = { ...session };
+    delete manifest.storageReservationId;
+    delete manifest.security;
+    await writeTransferManifest(manifest);
+    await rm(uploadSessionPath(session.folderName), { force: true });
+    await releaseStorageReservation(storageReservationId);
+  });
 }
 
 export async function prepareTransferFolder(folderName: string) {
@@ -433,9 +452,13 @@ export function storedFilePath(folderName: string, storedName: string) {
 
 export async function writeTransferManifest(manifest: TransferManifest) {
   const finalManifestPath = manifestPath(manifest.folderName);
-  const temporaryManifestPath = `${finalManifestPath}.tmp`;
-  await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
-  await rename(temporaryManifestPath, finalManifestPath);
+  const temporaryManifestPath = `${finalManifestPath}.${crypto.randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await rename(temporaryManifestPath, finalManifestPath);
+  } finally {
+    await rm(temporaryManifestPath, { force: true }).catch(() => undefined);
+  }
 }
 
 export async function incrementTransferStat(id: string, statName: "views" | "downloads") {

@@ -103,6 +103,10 @@ function clientAddress(request: Request) {
   return "unknown";
 }
 
+function lastForwardedValue(value: string | null) {
+  return value?.split(",").map((part) => part.trim()).filter(Boolean).at(-1);
+}
+
 async function opaqueKey(namespace: string, value: string) {
   const secret = await loadRateLimitSecret();
   return createHmac("sha256", secret).update(`${namespace}\0${value}`).digest("hex");
@@ -204,9 +208,9 @@ export function requestHasSameOrigin(request: Request) {
   try {
     const origin = new URL(suppliedOrigin);
     const trustProxy = proxyHeadersAreTrusted(request);
-    const forwardedHost = trustProxy ? request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() : undefined;
+    const forwardedHost = trustProxy ? lastForwardedValue(request.headers.get("x-forwarded-host")) : undefined;
     const host = forwardedHost || request.headers.get("host") || new URL(request.url).host;
-    const forwardedProtocol = trustProxy ? request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() : undefined;
+    const forwardedProtocol = trustProxy ? lastForwardedValue(request.headers.get("x-forwarded-proto")) : undefined;
     const protocol = forwardedProtocol ? `${forwardedProtocol}:` : new URL(request.url).protocol;
     return origin.protocol === protocol && origin.host === host;
   } catch {
