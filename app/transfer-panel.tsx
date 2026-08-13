@@ -54,6 +54,7 @@ const translations = {
     until: "bis",
     linkCopied: "Link kopiert",
     shareLink: "Hochladen & Link erstellen",
+    shareAction: "Link teilen",
     newTransfer: "Neue Übertragung erstellen",
     newTransferKicker: "Neue Übertragung",
     question: "Was möchtest du teilen?",
@@ -98,6 +99,7 @@ const translations = {
     until: "until",
     linkCopied: "Link copied",
     shareLink: "Upload & create link",
+    shareAction: "Share link",
     newTransfer: "Create another transfer",
     newTransferKicker: "New transfer",
     question: "What are you sharing?",
@@ -227,7 +229,6 @@ export function TransferPanel({ language }: { language: Language }) {
     }
     if (!next.length) return;
     setFiles(next);
-    void createTransfer(next);
   }
 
   function onFilesSelected(event: ChangeEvent<HTMLInputElement>) {
@@ -545,7 +546,7 @@ export function TransferPanel({ language }: { language: Language }) {
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button" type="button" onClick={shareLink}>
           {copied ? <Check size={18} /> : <Send size={18} />}
-          {copied ? text.linkCopied : text.shareLink}
+          {copied ? text.linkCopied : text.shareAction}
         </button>
         <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacy}</span></p>
         <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
@@ -594,11 +595,13 @@ export function TransferPanel({ language }: { language: Language }) {
               <div className="file-row" key={fileKey(file)}>
                 <span className="file-glyph" aria-hidden="true"><FileGlyph file={file} /></span>
                 <span className="file-name" title={file.name}>{file.name}</span>
-                <span className="file-progress" aria-label={`${fileProgress}% ${text.uploaded}`}>{fileProgress}%</span>
+                <span className="file-progress" aria-label={uploading ? `${fileProgress}% ${text.uploaded}` : undefined}>{uploading ? `${fileProgress}%` : ""}</span>
                 <span className="file-speed" aria-label={isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)} ${text.perSecond}` : undefined}>
                   {isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : ""}
                 </span>
-                <span className="file-size"><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</span>
+                <span className="file-size">
+                  {uploading ? <><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</> : formatBytes(file.size)}
+                </span>
                 <span className="file-actions">
                   {isCurrentUpload && (
                     <button className="pause-button" type="button" onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
