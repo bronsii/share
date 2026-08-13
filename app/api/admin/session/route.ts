@@ -1,4 +1,3 @@
-import { isIP } from "node:net";
 import { NextResponse } from "next/server";
 import {
   ADMIN_COOKIE_NAME,
@@ -7,73 +6,64 @@ import {
   adminRequestIsAuthenticated,
   createAdminSessionToken,
 } from "@/lib/admin-auth";
+import {
+  clientRateLimitKey,
+  consumeRateLimit,
+  globalRateLimitKey,
+  readJsonBody,
+  requestHasSameOrigin,
+  RequestBodyTooLargeError,
+} from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type Attempt = { count: number; resetAt: number };
-const globalAttempts = globalThis as typeof globalThis & { shareAdminAttempts?: Map<string, Attempt> };
-const attempts = globalAttempts.shareAdminAttempts ??= new Map<string, Attempt>();
 const MAX_ATTEMPTS = 5;
-const MAX_GLOBAL_ATTEMPTS = 50;
+const MAX_GLOBAL_ATTEMPTS = 25;
 const WINDOW_MS = 15 * 60 * 1000;
-const GLOBAL_ATTEMPT_KEY = "__all__";
+const GLOBAL_WINDOW_MS = 60 * 60 * 1000;
 
-function clientAddress(request: Request) {
-  const forwardedAddresses = request.headers.get("x-forwarded-for")
-    ?.split(",")
-    .map((address) => address.trim())
-    .filter(Boolean);
-  const address = forwardedAddresses?.at(-1);
-  return address && isIP(address) ? address : "unknown";
-}
-
-function activeAttempt(key: string, now: number) {
-  const attempt = attempts.get(key);
-  if (attempt && attempt.resetAt <= now) {
-    attempts.delete(key);
-    return undefined;
-  }
-  return attempt;
-}
-
-function recordFailedAttempt(key: string, now: number) {
-  const current = activeAttempt(key, now);
-  attempts.set(key, current
-    ? { ...current, count: current.count + 1 }
-    : { count: 1, resetAt: now + WINDOW_MS });
-}
-
-function tooManyAttempts(resetAt: number, now: number) {
-  const retryAfter = Math.max(1, Math.ceil((resetAt - now) / 1000));
+function tooManyAttempts(retryAfter: number) {
   return NextResponse.json(
-    { error: "Zu viele Versuche. Bitte warte 15 Minuten." },
-    { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    { error: "Zu viele Versuche. Bitte warte und versuche es später erneut." },
+    { status: 429, headers: { "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
   );
 }
 
 export async function GET(request: Request) {
-  return NextResponse.json({ authenticated: adminRequestIsAuthenticated(request) });
+  return NextResponse.json(
+    { authenticated: adminRequestIsAuthenticated(request) },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 export async function POST(request: Request) {
-  const address = clientAddress(request);
-  const now = Date.now();
-  const current = activeAttempt(address, now);
-  const globalCurrent = activeAttempt(GLOBAL_ATTEMPT_KEY, now);
-  if (current && current.count >= MAX_ATTEMPTS) return tooManyAttempts(current.resetAt, now);
-  if (globalCurrent && globalCurrent.count >= MAX_GLOBAL_ATTEMPTS) return tooManyAttempts(globalCurrent.resetAt, now);
+  if (!requestHasSameOrigin(request)) {
+    return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
 
-  const body = await request.json().catch(() => null) as { code?: unknown } | null;
   try {
-    if (!body || typeof body.code !== "string" || !adminCodeIsValid(body.code)) {
-      recordFailedAttempt(address, now);
-      recordFailedAttempt(GLOBAL_ATTEMPT_KEY, now);
-      return NextResponse.json({ error: "Der Code ist nicht richtig." }, { status: 401 });
+    const clientKey = await clientRateLimitKey(request);
+    const [clientLimit, globalLimit] = await Promise.all([
+      consumeRateLimit({ scope: "admin-login-client", key: clientKey, limit: MAX_ATTEMPTS, windowMs: WINDOW_MS }),
+      consumeRateLimit({ scope: "admin-login-global", key: globalRateLimitKey(), limit: MAX_GLOBAL_ATTEMPTS, windowMs: GLOBAL_WINDOW_MS }),
+    ]);
+    if (!clientLimit.allowed || !globalLimit.allowed) {
+      return tooManyAttempts(Math.max(
+        clientLimit.allowed ? 0 : clientLimit.retryAfter,
+        globalLimit.allowed ? 0 : globalLimit.retryAfter,
+      ));
     }
 
-    attempts.delete(address);
-    const response = NextResponse.json({ authenticated: true });
+    const body = await readJsonBody<{ code?: unknown }>(request, 4096);
+    if (!body || typeof body.code !== "string" || !adminCodeIsValid(body.code)) {
+      return NextResponse.json(
+        { error: "Die Passphrase ist nicht richtig." },
+        { status: 401, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    const response = NextResponse.json({ authenticated: true }, { headers: { "Cache-Control": "no-store" } });
     response.cookies.set(ADMIN_COOKIE_NAME, createAdminSessionToken(), {
       httpOnly: true,
       secure: true,
@@ -83,13 +73,25 @@ export async function POST(request: Request) {
     });
     return response;
   } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "Die Anfrage ist zu groß." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Ungültige Anfrage." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    }
     console.error("Admin login failed", error);
-    return NextResponse.json({ error: "Die Verwaltung ist noch nicht konfiguriert." }, { status: 503 });
+    return NextResponse.json(
+      { error: "Die Verwaltung ist noch nicht konfiguriert." },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }
 
-export async function DELETE() {
-  const response = NextResponse.json({ authenticated: false });
+export async function DELETE(request: Request) {
+  if (!requestHasSameOrigin(request)) {
+    return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
+  const response = NextResponse.json({ authenticated: false }, { headers: { "Cache-Control": "no-store" } });
   response.cookies.set(ADMIN_COOKIE_NAME, "", {
     httpOnly: true,
     secure: true,

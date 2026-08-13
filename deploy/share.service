@@ -1,0 +1,45 @@
+[Unit]
+Description=Bronsinger Share Next.js application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bronsi
+Group=bronsi
+WorkingDirectory=/srv/apps/share
+Environment=NODE_ENV=production
+Environment=SHARED_ROOT=/srv/apps/share/shared
+EnvironmentFile=/etc/share-admin.env
+ExecStart=/opt/node/bin/node /srv/apps/share/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadOnlyPaths=/srv/apps/share
+ReadWritePaths=/srv/apps/share/shared
+NoExecPaths=/srv/apps/share/shared
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

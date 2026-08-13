@@ -9,5 +9,8 @@ export async function GET(request: Request) {
   if (!adminRequestIsAuthenticated(request)) {
     return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
   }
-  return NextResponse.json({ transfers: await listTransfersForAdmin() });
+  return NextResponse.json(
+    { transfers: await listTransfersForAdmin() },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

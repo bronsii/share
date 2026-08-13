@@ -1,0 +1,243 @@
+"use client";
+
+import { Download, FileArchive, FileImage, FileText, KeyRound, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  decodeNoncePrefix,
+  decryptChunk,
+  decryptMetadata,
+  EncryptedTransferMetadata,
+  GCM_TAG_SIZE,
+  importTransferKey,
+  PLAINTEXT_CHUNK_SIZE,
+} from "@/lib/e2e-crypto";
+
+type EncryptedFile = { id: string; size: number; plaintextSize: number };
+type Props = { id: string; encryptedMetadata: string; files: EncryptedFile[]; expiresAt: string };
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} GB`;
+  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
+}
+
+function FileGlyph({ name, type }: { name: string; type: string }) {
+  const extension = name.split(".").pop()?.toLowerCase();
+  if (type.startsWith("image/")) return <FileImage size={22} />;
+  if (["zip", "rar", "7z", "tar", "gz"].includes(extension ?? "")) return <FileArchive size={22} />;
+  return <FileText size={22} />;
+}
+
+function validFileName(name: string) {
+  return Boolean(name)
+    && name.length <= 240
+    && !name.includes("/")
+    && !name.includes("\\")
+    && !Array.from(name).some((character) => character.charCodeAt(0) < 32);
+}
+
+async function ensureDownloadWorker() {
+  if (!("serviceWorker" in navigator)) throw new Error("Dieser Browser unterstützt keine sicheren Streaming-Downloads.");
+  const registration = await navigator.serviceWorker.register("/e2e-download-sw.js", { scope: "/" });
+  await navigator.serviceWorker.ready;
+  if (!navigator.serviceWorker.controller) {
+    await new Promise<void>((resolve, reject) => {
+      const onControllerChange = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const timeout = window.setTimeout(() => {
+        navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+        reject(new Error("Download-Dienst konnte nicht gestartet werden. Bitte lade die Seite neu."));
+      }, 5000);
+      navigator.serviceWorker.addEventListener("controllerchange", onControllerChange, { once: true });
+      if (navigator.serviceWorker.controller) onControllerChange();
+    });
+  }
+  return navigator.serviceWorker.controller ?? registration.active;
+}
+
+function createExactReader(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  let current: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+  let currentOffset = 0;
+  return async (length: number) => {
+    const result = new Uint8Array(length);
+    let written = 0;
+    while (written < length) {
+      if (currentOffset >= current.byteLength) {
+        const next = await reader.read();
+        if (next.done) throw new Error("Der verschlüsselte Download ist unvollständig.");
+        current = next.value;
+        currentOffset = 0;
+      }
+      const available = current.byteLength - currentOffset;
+      const take = Math.min(available, length - written);
+      result.set(current.subarray(currentOffset, currentOffset + take), written);
+      currentOffset += take;
+      written += take;
+    }
+    return result.buffer;
+  };
+}
+
+export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt }: Props) {
+  const keyRef = useRef<CryptoKey | null>(null);
+  const [metadata, setMetadata] = useState<EncryptedTransferMetadata | null>(null);
+  const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const fragment = window.location.hash.slice(1);
+        const key = await importTransferKey(fragment);
+        const decrypted = await decryptMetadata(key, encryptedMetadata);
+        if (decrypted.message.length > 500 || decrypted.files.length !== files.length || decrypted.files.some((file, index) => {
+          return file.size !== files[index].plaintextSize
+            || !validFileName(file.name)
+            || file.type.length > 200;
+        })) throw new Error("Die verschlüsselten Dateiinformationen stimmen nicht mit der Übertragung überein.");
+        decrypted.files.forEach((file) => decodeNoncePrefix(file.noncePrefix));
+        if (active) {
+          keyRef.current = key;
+          setMetadata(decrypted);
+        }
+      } catch (loadError) {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Die Übertragung konnte nicht entschlüsselt werden.");
+      }
+    })();
+    return () => { active = false; keyRef.current = null; };
+  }, [encryptedMetadata, files]);
+
+  async function downloadFile(index: number) {
+    const key = keyRef.current;
+    const fileMetadata = metadata?.files[index];
+    const serverFile = files[index];
+    if (!key || !fileMetadata || downloading !== null) return;
+    setError("");
+    setDownloading(index);
+    setProgress(0);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let port: MessagePort | null = null;
+    try {
+      const worker = await ensureDownloadWorker();
+      if (!worker) throw new Error("Download-Dienst ist nicht verfügbar.");
+      const response = await fetch(`/api/transfers/${id}/${serverFile.id}`, { cache: "no-store" });
+      if (!response.ok || !response.body) throw new Error(await response.text() || "Download fehlgeschlagen.");
+      reader = response.body.getReader();
+      const readExactly = createExactReader(reader);
+      const noncePrefix = decodeNoncePrefix(fileMetadata.noncePrefix);
+      const channel = new MessageChannel();
+      port = channel.port1;
+      const token = crypto.randomUUID();
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error("Download-Dienst antwortet nicht.")), 5000);
+        port!.onmessage = ({ data }) => {
+          if (data?.type === "ready") {
+            window.clearTimeout(timeout);
+            resolve();
+          }
+        };
+        worker.postMessage({
+          type: "prepare-e2e-download",
+          token,
+          name: fileMetadata.name,
+          size: fileMetadata.size,
+          contentType: fileMetadata.type,
+        }, [channel.port2]);
+      });
+
+      let chunkIndex = 0;
+      let plaintextOffset = 0;
+      let finished = false;
+      const completion = new Promise<void>((resolve, reject) => {
+        port!.onmessage = ({ data }) => {
+          if (data?.type === "cancel") {
+            void reader?.cancel();
+            reject(new Error("Download wurde abgebrochen."));
+            return;
+          }
+          if (data?.type !== "pull" || finished) return;
+          void (async () => {
+            try {
+              if (plaintextOffset >= fileMetadata.size) {
+                finished = true;
+                port!.postMessage({ type: "done" });
+                resolve();
+                return;
+              }
+              const plaintextLength = Math.min(PLAINTEXT_CHUNK_SIZE, fileMetadata.size - plaintextOffset);
+              const ciphertext = await readExactly(plaintextLength + GCM_TAG_SIZE);
+              const plaintext = await decryptChunk(key, noncePrefix, chunkIndex, ciphertext);
+              plaintextOffset += plaintext.byteLength;
+              chunkIndex += 1;
+              setProgress(Math.min(100, Math.round((plaintextOffset / fileMetadata.size) * 100)));
+              port!.postMessage({ type: "chunk", chunk: plaintext }, [plaintext]);
+            } catch (downloadError) {
+              finished = true;
+              const message = downloadError instanceof Error ? downloadError.message : "Entschlüsselung fehlgeschlagen.";
+              port!.postMessage({ type: "error", message });
+              reject(downloadError);
+            }
+          })();
+        };
+      });
+      const anchor = document.createElement("a");
+      anchor.href = `/e2e-download/${token}`;
+      anchor.download = fileMetadata.name;
+      anchor.hidden = true;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      await completion;
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Der Download konnte nicht entschlüsselt werden.");
+    } finally {
+      port?.close();
+      await reader?.cancel().catch(() => undefined);
+      setDownloading(null);
+    }
+  }
+
+  if (error && !metadata) {
+    return (
+      <section className="download-card encrypted-error-card">
+        <div className="empty-clock"><KeyRound size={28} /></div>
+        <h1>Schlüssel fehlt oder ist ungültig.</h1>
+        <p>{error}</p>
+      </section>
+    );
+  }
+  if (!metadata) {
+    return <section className="download-card encrypted-loading"><KeyRound size={24} /><span>Freigabe wird lokal entschlüsselt …</span></section>;
+  }
+
+  const totalSize = metadata.files.reduce((sum, file) => sum + file.size, 0);
+  const expires = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(expiresAt));
+  return (
+    <section className="download-card">
+      <div className="e2e-badge"><ShieldCheck size={15} /> Ende-zu-Ende verschlüsselt</div>
+      <div className="download-title-row">
+        <div><p className="panel-kicker">Für dich verschlüsselt</p><h1>{metadata.files.length === 1 ? "Eine Datei wartet auf dich." : `${metadata.files.length} Dateien warten auf dich.`}</h1></div>
+        <div className="download-total"><span>Gesamt</span><strong>{formatBytes(totalSize)}</strong></div>
+      </div>
+      {metadata.message && <blockquote className="sender-message">„{metadata.message}“</blockquote>}
+      {metadata.files.length > 1 && <p className="encrypted-download-hint">Die Dateien werden einzeln auf diesem Gerät entschlüsselt.</p>}
+      <div className="download-file-list">
+        {metadata.files.map((file, index) => (
+          <div className="download-file" key={files[index].id}>
+            <span className="download-file-icon" aria-hidden="true"><FileGlyph name={file.name} type={file.type} /></span>
+            <span className="download-file-name">{file.name}</span>
+            <span className="download-file-size">{downloading === index ? `${progress} %` : formatBytes(file.size)}</span>
+            <button type="button" disabled={downloading !== null} onClick={() => void downloadFile(index)} aria-label={`${file.name} sicher herunterladen`}><Download size={19} /></button>
+          </div>
+        ))}
+      </div>
+      {error && <p className="form-error encrypted-download-error" role="alert">{error}</p>}
+      <div className="download-expiry"><ShieldCheck size={18} /><span>Entschlüsselung nur auf deinem Gerät. Gültig bis <strong>{expires} Uhr</strong>.</span></div>
+    </section>
+  );
+}

@@ -1,0 +1,36 @@
+[Unit]
+Description=Delete expired Bronsinger Share transfers
+
+[Service]
+Type=oneshot
+User=bronsi
+Group=bronsi
+WorkingDirectory=/srv/apps/share
+Environment=SHARED_ROOT=/srv/apps/share/shared
+ExecStart=/opt/node/bin/node /srv/apps/share/scripts/cleanup-expired.mjs
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProtectSystem=strict
+ProcSubset=pid
+ReadOnlyPaths=/srv/apps/share
+ReadWritePaths=/srv/apps/share/shared
+NoExecPaths=/srv/apps/share/shared
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+UMask=0077

@@ -6,15 +6,17 @@ import { Language, TransferPanel } from "./transfer-panel";
 
 const heroCopy = {
   de: {
-    firstLine: "Hochladen.",
-    secondLine: "Link teilen.",
-    lead: "100% kostenlos. ohne Registrierung. max. 15 GB.",
+    firstLine: "Upload.",
+    secondLine: "Share.",
+    lead: "Kostenlos. Ohne Registrierung. Bis zu 5\u00a0GB.",
+    hosting: "Hosted in Germany.",
     languageLabel: "Sprache wählen",
   },
   en: {
     firstLine: "Upload.",
     secondLine: "Share.",
-    lead: "100% free. no registration. max. 15 GB.",
+    lead: "Free. No registration. Up to 5\u00a0GB.",
+    hosting: "Hosted in Germany.",
     languageLabel: "Choose language",
   },
 } as const;
@@ -43,11 +45,11 @@ export default function Home() {
 
         <div className="hero-grid compact-grid">
           <div className="hero-copy compact-copy">
-            <h1>
+            <h1 className="is-inline">
               {text.firstLine}
               <span>{text.secondLine}</span>
             </h1>
-            <p className="hero-lead">{text.lead}</p>
+            <p className="hero-lead"><span>{text.lead}</span><span><i className="inline-germany-flag" role="img" aria-label="Deutschlandflagge" />{text.hosting}</span></p>
           </div>
           <TransferPanel language={language} />
         </div>

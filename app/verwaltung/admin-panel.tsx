@@ -76,7 +76,7 @@ export function AdminPanel() {
   }, [authenticated, focusCodeInput]);
 
   async function login(code: string) {
-    if (busy || code.length !== 4) return;
+    if (busy || code.length < 4) return;
     setBusy(true);
     setError("");
     const response = await fetch("/api/admin/session", {
@@ -98,10 +98,9 @@ export function AdminPanel() {
   }
 
   function updateCode(rawValue: string) {
-    const next = rawValue.replace(/\D/g, "").slice(0, 4);
+    const next = rawValue.slice(0, 256);
     setError("");
     setCode(next);
-    if (next.length === 4) void login(next);
   }
 
   async function logout() {
@@ -135,33 +134,28 @@ export function AdminPanel() {
         <div className="admin-lock-mark"><LockKeyhole size={25} /></div>
         <p className="admin-kicker">Private Verwaltung</p>
         <h1>Upload-Speicher</h1>
-        <p>Gib deinen Verwaltungscode ein.</p>
+        <p>Gib deine Admin-Passphrase ein.</p>
         <form onSubmit={(event) => { event.preventDefault(); void login(code); }}>
-          <label htmlFor="admin-code">Code</label>
-          <label className="admin-code-inputs">
-            <div className="admin-code-boxes" aria-hidden="true">
-              {Array.from({ length: 4 }, (_, index) => (
-                <span className={index === code.length ? "is-current" : undefined} key={index}>
-                  {code[index] ? "•" : ""}
-                </span>
-              ))}
-            </div>
-            <input
-              ref={codeInput}
-              id="admin-code"
-              type="password"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoFocus
-              value={code}
-              maxLength={4}
-              aria-label="Vierstelliger Verwaltungscode"
-              onChange={(event) => updateCode(event.target.value)}
-              disabled={busy}
-            />
-          </label>
+          <label htmlFor="admin-code">Passphrase</label>
+          <input
+            ref={codeInput}
+            className="admin-passphrase-input"
+            id="admin-code"
+            type="password"
+            autoComplete="current-password"
+            autoFocus
+            value={code}
+            minLength={4}
+            maxLength={256}
+            aria-label="Admin-Passphrase"
+            onChange={(event) => updateCode(event.target.value)}
+            disabled={busy}
+          />
           {error && <p className="admin-error" role="alert">{error}</p>}
           {busy && <p className="admin-code-state" role="status">Prüfe …</p>}
+          <button className="admin-login-button" type="submit" disabled={busy || code.length < 4}>
+            {busy ? "Anmeldung läuft …" : "Anmelden"}
+          </button>
         </form>
       </div>
     );

@@ -2,8 +2,8 @@ import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-export const ADMIN_COOKIE_NAME = "share_admin_session";
-export const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
+export const ADMIN_COOKIE_NAME = "__Host-share_admin_session";
+export const ADMIN_SESSION_SECONDS = 2 * 60 * 60;
 
 function configuredCode() {
   const value = process.env.SHARE_ADMIN_CODE;
