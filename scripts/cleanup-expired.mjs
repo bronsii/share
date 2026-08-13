@@ -5,7 +5,7 @@ const sharedRoot = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared")
 const folderPattern = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
 const dryRun = process.argv.includes("--dry-run");
 const now = Date.now();
-const incompleteMaxIdleMs = 12 * 60 * 60 * 1000;
+const incompleteMaxIdleMs = 2 * 60 * 60 * 1000;
 let deletedExpired = 0;
 let deletedIncomplete = 0;
 

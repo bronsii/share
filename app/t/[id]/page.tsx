@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Clock3, Download, FileArchive, FileImage, FileText, ShieldCheck } from "lucide-react";
 import { getTransfer, transferIsExpired } from "@/lib/storage";
 import { TransferViewTracker } from "./view-tracker";
+import { EncryptedTransferPanel } from "./encrypted-transfer-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,23 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
   }
   const totalSize = transfer.files.reduce((sum, file) => sum + file.size, 0);
   const expires = new Intl.DateTimeFormat("de-DE", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(transfer.expiresAt));
+  if (transfer.encryption?.version === 1) {
+    return (
+      <main className="download-page">
+        <TransferViewTracker id={transfer.id} />
+        <div className="download-ambient" />
+        <header className="download-header">
+          <Link className="back-link" href="/"><ArrowLeft size={16} /> Zur Startseite</Link>
+        </header>
+        <EncryptedTransferPanel
+          id={transfer.id}
+          encryptedMetadata={transfer.encryption.metadata}
+          files={transfer.files.map((file) => ({ id: file.id, size: file.size, plaintextSize: file.plaintextSize ?? 0 }))}
+          expiresAt={transfer.expiresAt}
+        />
+      </main>
+    );
+  }
   return (
     <main className="download-page">
       <TransferViewTracker id={transfer.id} />

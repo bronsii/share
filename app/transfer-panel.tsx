@@ -16,16 +16,28 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
+import {
+  chunkIndexFromCiphertextOffset,
+  ciphertextOffsetForChunk,
+  createNoncePrefix,
+  createTransferKey,
+  encodeNoncePrefix,
+  encryptedFileSize,
+  encryptChunk,
+  encryptMetadata,
+  PLAINTEXT_CHUNK_SIZE,
+  plaintextProgressFromCiphertext,
+} from "@/lib/e2e-crypto";
 
 const MAX_FILES = 20;
-const MAX_TOTAL_SIZE = 15 * 1024 ** 3;
+const MAX_TOTAL_SIZE = 5 * 1024 ** 3;
 
 export type Language = "de" | "en";
 
 const translations = {
   de: {
     tooManyFiles: (maximum: number) => `Du kannst höchstens ${maximum} Dateien auf einmal teilen.`,
-    tooLarge: "Die Übertragung darf insgesamt höchstens 15 GB groß sein.",
+    tooLarge: "Die Übertragung darf insgesamt höchstens 5 GB groß sein.",
     emptyOrFolder: "Ordner oder leere Dateien können nicht hochgeladen werden. Bitte wähle einzelne Dateien oder packe den Ordner als ZIP-Datei.",
     uploadFailed: "Die Übertragung konnte nicht erstellt werden.",
     connectionLost: "Die Verbindung wurde beim Hochladen unterbrochen.",
@@ -52,6 +64,8 @@ const translations = {
     selectedFiles: "Ausgewählte Dateien",
     uploaded: "hochgeladen",
     perSecond: "pro Sekunde",
+    remaining: "verbleibend",
+    timeRemaining: "Restzeit",
     remove: "entfernen",
     pauseUpload: "Upload pausieren",
     resumeUpload: "Upload fortsetzen",
@@ -62,12 +76,12 @@ const translations = {
     optional: "optional",
     placeholder: "z. B. hier sind die Urlaubsfotos …",
     cancelUpload: "Upload abbrechen und l\u00f6schen",
-    privacy: "Der Link ist zufällig und wird nicht öffentlich gelistet.",
+    privacy: "Ende-zu-Ende verschlüsselt: Dateien werden vor dem Upload im Browser verschlüsselt. Der Schlüssel bleibt im Freigabelink. Automatische Löschung nach Ablauf.",
     locale: "de-DE",
   },
   en: {
     tooManyFiles: (maximum: number) => `You can share up to ${maximum} files at once.`,
-    tooLarge: "The transfer may not exceed 15 GB in total.",
+    tooLarge: "The transfer may not exceed 5 GB in total.",
     emptyOrFolder: "Folders or empty files cannot be uploaded. Please choose individual files or create a ZIP archive first.",
     uploadFailed: "The transfer could not be created.",
     connectionLost: "The connection was interrupted during upload.",
@@ -94,6 +108,8 @@ const translations = {
     selectedFiles: "Selected files",
     uploaded: "uploaded",
     perSecond: "per second",
+    remaining: "remaining",
+    timeRemaining: "Time remaining",
     remove: "remove",
     pauseUpload: "Pause upload",
     resumeUpload: "Resume upload",
@@ -104,7 +120,7 @@ const translations = {
     optional: "optional",
     placeholder: "e.g. here are the holiday photos …",
     cancelUpload: "Cancel and delete upload",
-    privacy: "The link is random and is not listed publicly.",
+    privacy: "End-to-end encrypted: Files are encrypted in your browser before upload. The key remains in the share link. Automatic deletion after expiry.",
     locale: "en-GB",
   },
 } as const;
@@ -121,13 +137,28 @@ type UploadSession = {
   files: Array<{ id: string; name: string; size: number; uploaded: number }>;
 };
 
-const CHUNK_SIZE = 4 * 1024 ** 2;
+type ClientEncryptionState = {
+  key: CryptoKey;
+  fragment: string;
+  noncePrefixes: Uint8Array[];
+};
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} GB`;
   return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
+}
+
+function formatDuration(seconds: number, language: Language) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  const rounded = Math.ceil(seconds);
+  if (rounded < 60) return language === "de" ? `${rounded} Sek.` : `${rounded} sec`;
+  const minutes = Math.ceil(rounded / 60);
+  if (minutes < 60) return language === "de" ? `${minutes} Min.` : `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return language === "de" ? `${hours} Std. ${restMinutes} Min.` : `${hours} hr ${restMinutes} min`;
 }
 
 function fileKey(file: File) {
@@ -149,6 +180,7 @@ export function TransferPanel({ language }: { language: Language }) {
   const pausedRef = useRef(false);
   const requestRef = useRef<XMLHttpRequest | null>(null);
   const sessionRef = useRef<UploadSession | null>(null);
+  const encryptionRef = useRef<ClientEncryptionState | null>(null);
   const speedSampleRef = useRef({ time: 0, bytes: 0, value: 0 });
   const [files, setFiles] = useState<File[]>([]);
   const [days, setDays] = useState("3");
@@ -164,6 +196,9 @@ export function TransferPanel({ language }: { language: Language }) {
   const [copied, setCopied] = useState(false);
 
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const remainingBytes = Math.max(0, totalSize - uploadedBytes);
+  const totalProgress = totalSize ? Math.min(100, Math.round((uploadedBytes / totalSize) * 100)) : 0;
+  const remainingSeconds = uploadSpeed > 0 ? remainingBytes / uploadSpeed : 0;
 
   function uploadedBytesForFile(index: number) {
     const previousBytes = files.slice(0, index).reduce((sum, file) => sum + file.size, 0);
@@ -225,10 +260,27 @@ export function TransferPanel({ language }: { language: Language }) {
     speedSampleRef.current = { time: performance.now(), bytes: 0, value: 0 };
     setError("");
     try {
+      const { key, fragment } = await createTransferKey();
+      const noncePrefixes = uploadFiles.map(() => createNoncePrefix());
+      const encryptedMetadata = await encryptMetadata(key, {
+        version: 1,
+        message: message.trim(),
+        files: uploadFiles.map((file, index) => ({
+          name: file.name.slice(0, 240),
+          type: (file.type || "application/octet-stream").slice(0, 200),
+          size: file.size,
+          noncePrefix: encodeNoncePrefix(noncePrefixes[index]),
+        })),
+      });
+      encryptionRef.current = { key, fragment, noncePrefixes };
       const response = await fetch("/api/uploads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files: uploadFiles.map((file) => ({ name: file.name, size: file.size, type: file.type })), days: Number(days), message: message.trim() }),
+        body: JSON.stringify({
+          files: uploadFiles.map((file) => ({ size: encryptedFileSize(file.size), plaintextSize: file.size })),
+          days: Number(days),
+          encryption: { version: 1, metadata: encryptedMetadata },
+        }),
       });
       const session = await response.json() as UploadSession & { error?: string };
       if (!response.ok || !session.id) throw new Error(session.error || text.uploadFailed);
@@ -236,8 +288,14 @@ export function TransferPanel({ language }: { language: Language }) {
       await continueUpload(uploadFiles, session);
     } catch (uploadError) {
       if (!pausedRef.current) {
-        uploadingRef.current = false;
-        setUploading(false);
+        if (sessionRef.current) {
+          pausedRef.current = true;
+          setPaused(true);
+          setUploadSpeed(0);
+        } else {
+          uploadingRef.current = false;
+          setUploading(false);
+        }
         setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
       }
     }
@@ -255,14 +313,25 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploadSpeed(smoothed);
   }
 
-  function uploadChunk(sessionId: string, fileId: string, blob: Blob, offset: number, completedBefore: number) {
+  function uploadChunk(
+    sessionId: string,
+    fileId: string,
+    body: Blob | ArrayBuffer,
+    offset: number,
+    progressStart: number,
+    progressBytes: number,
+  ) {
     return new Promise<number>((resolve, reject) => {
       const request = new XMLHttpRequest();
       requestRef.current = request;
       request.open("PUT", `/api/uploads/${sessionId}/${fileId}`);
       request.responseType = "json";
       request.setRequestHeader("X-Upload-Offset", String(offset));
-      request.upload.addEventListener("progress", (event) => updateProgress(completedBefore + offset + event.loaded));
+      const requestBytes = body instanceof Blob ? body.size : body.byteLength;
+      request.upload.addEventListener("progress", (event) => {
+        const fraction = requestBytes > 0 ? Math.min(1, event.loaded / requestBytes) : 0;
+        updateProgress(progressStart + progressBytes * fraction);
+      });
       request.addEventListener("load", () => {
         const response = request.response as { uploaded?: number; error?: string } | null;
         if (request.status >= 200 && request.status < 300 && typeof response?.uploaded === "number") resolve(response.uploaded);
@@ -270,7 +339,7 @@ export function TransferPanel({ language }: { language: Language }) {
       });
       request.addEventListener("error", () => reject(new Error(text.connectionLost)));
       request.addEventListener("abort", () => reject(new DOMException("Paused", "AbortError")));
-      request.send(blob);
+      request.send(body);
     });
   }
 
@@ -280,6 +349,11 @@ export function TransferPanel({ language }: { language: Language }) {
     const status = await statusResponse.json() as { files?: Array<{ id: string; uploaded: number }>; error?: string };
     if (!statusResponse.ok || !status.files) throw new Error(status.error || text.uploadFailed);
     const offsets = new Map(status.files.map((file) => [file.id, file.uploaded]));
+    const encryption = encryptionRef.current;
+    if (encryption) {
+      await continueEncryptedUpload(uploadFiles, knownSession, offsets, encryption);
+      return;
+    }
     let completedBefore = 0;
     updateProgress(status.files.reduce((sum, file) => sum + file.uploaded, 0));
     try {
@@ -290,8 +364,8 @@ export function TransferPanel({ language }: { language: Language }) {
         let offset = offsets.get(serverFile.id) ?? 0;
         while (offset < file.size) {
           if (pausedRef.current) return;
-          const end = Math.min(offset + CHUNK_SIZE, file.size);
-          offset = await uploadChunk(knownSession.id, serverFile.id, file.slice(offset, end), offset, completedBefore);
+          const end = Math.min(offset + PLAINTEXT_CHUNK_SIZE, file.size);
+          offset = await uploadChunk(knownSession.id, serverFile.id, file.slice(offset, end), offset, completedBefore + offset, end - offset);
           updateProgress(completedBefore + offset);
         }
         completedBefore += file.size;
@@ -314,6 +388,65 @@ export function TransferPanel({ language }: { language: Language }) {
     }
   }
 
+  async function continueEncryptedUpload(
+    uploadFiles: File[],
+    knownSession: UploadSession,
+    offsets: Map<string, number>,
+    encryption: ClientEncryptionState,
+  ) {
+    const resumedPlaintext = knownSession.files.reduce((sum, serverFile, index) => {
+      return sum + plaintextProgressFromCiphertext(offsets.get(serverFile.id) ?? 0, uploadFiles[index].size);
+    }, 0);
+    updateProgress(resumedPlaintext);
+    let completedBefore = 0;
+    try {
+      for (let index = 0; index < uploadFiles.length; index += 1) {
+        const file = uploadFiles[index];
+        const serverFile = knownSession.files[index];
+        setCurrentFileIndex(index);
+        let cipherOffset = offsets.get(serverFile.id) ?? 0;
+        let chunkIndex = chunkIndexFromCiphertextOffset(cipherOffset, file.size);
+        let plaintextOffset = Math.min(file.size, chunkIndex * PLAINTEXT_CHUNK_SIZE);
+        while (plaintextOffset < file.size) {
+          if (pausedRef.current) return;
+          const end = Math.min(plaintextOffset + PLAINTEXT_CHUNK_SIZE, file.size);
+          const plaintext = await file.slice(plaintextOffset, end).arrayBuffer();
+          const ciphertext = await encryptChunk(encryption.key, encryption.noncePrefixes[index], chunkIndex, plaintext);
+          if (pausedRef.current) return;
+          if (cipherOffset !== ciphertextOffsetForChunk(chunkIndex)) throw new Error(text.uploadFailed);
+          cipherOffset = await uploadChunk(
+            knownSession.id,
+            serverFile.id,
+            ciphertext,
+            cipherOffset,
+            completedBefore + plaintextOffset,
+            end - plaintextOffset,
+          );
+          plaintextOffset = end;
+          chunkIndex += 1;
+          updateProgress(completedBefore + plaintextOffset);
+        }
+        completedBefore += file.size;
+      }
+      const completeResponse = await fetch(`/api/uploads/${knownSession.id}/complete`, { method: "POST" });
+      const payload = await completeResponse.json() as UploadResult & { error?: string };
+      if (!completeResponse.ok || !payload.url) throw new Error(payload.error || text.uploadFailed);
+      setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
+      setUploadSpeed(0);
+      setResult({ ...payload, url: `${payload.url}#${encryption.fragment}` });
+      setCopied(false);
+      sessionRef.current = null;
+      encryptionRef.current = null;
+      uploadingRef.current = false;
+      setUploading(false);
+    } catch (uploadError) {
+      if (uploadError instanceof DOMException && uploadError.name === "AbortError" && pausedRef.current) return;
+      throw uploadError;
+    } finally {
+      requestRef.current = null;
+    }
+  }
+
   function pauseUpload() {
     pausedRef.current = true;
     setPaused(true);
@@ -325,10 +458,12 @@ export function TransferPanel({ language }: { language: Language }) {
     if (!sessionRef.current || !pausedRef.current) return;
     pausedRef.current = false;
     setPaused(false);
+    setError("");
     speedSampleRef.current = { time: performance.now(), bytes: uploadedBytes, value: 0 };
     void continueUpload().catch((uploadError) => {
-      uploadingRef.current = false;
-      setUploading(false);
+      pausedRef.current = true;
+      setPaused(true);
+      setUploadSpeed(0);
       setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
     });
   }
@@ -338,6 +473,7 @@ export function TransferPanel({ language }: { language: Language }) {
     requestRef.current?.abort();
     const session = sessionRef.current;
     sessionRef.current = null;
+    encryptionRef.current = null;
     if (session) await fetch(`/api/uploads/${session.id}`, { method: "DELETE" }).catch(() => undefined);
     uploadingRef.current = false;
     setUploading(false);
@@ -382,6 +518,7 @@ export function TransferPanel({ language }: { language: Language }) {
     uploadingRef.current = false;
     pausedRef.current = false;
     sessionRef.current = null;
+    encryptionRef.current = null;
     setError("");
   }
 
@@ -410,6 +547,7 @@ export function TransferPanel({ language }: { language: Language }) {
           {copied ? <Check size={18} /> : <Send size={18} />}
           {copied ? text.linkCopied : text.shareLink}
         </button>
+        <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacy}</span></p>
         <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
       </section>
     );
@@ -422,7 +560,7 @@ export function TransferPanel({ language }: { language: Language }) {
           <p className="panel-kicker">{text.newTransferKicker}</p>
           <h2 id="transfer-title">{text.question}</h2>
         </div>
-        <div className="limit-pill">max. 15GB</div>
+        <div className="limit-pill">max. 5{"\u00a0"}GB</div>
       </div>
 
       <input ref={inputRef} className="sr-only" type="file" multiple disabled={uploading} onChange={onFilesSelected} aria-label={text.chooseFiles} />
@@ -475,6 +613,21 @@ export function TransferPanel({ language }: { language: Language }) {
         </div>
       )}
 
+      {uploading && (
+        <div className="upload-summary" aria-live="polite">
+          <div className="upload-summary-line">
+            <strong>{totalProgress} %</strong>
+            <span>{formatBytes(uploadedBytes)} / {formatBytes(totalSize)}</span>
+          </div>
+          <progress max="100" value={totalProgress} aria-label={`${totalProgress} % ${text.uploaded}`} />
+          <div className="upload-summary-line upload-summary-details">
+            <span>{uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : paused ? "—" : "…"}</span>
+            <span>{formatBytes(remainingBytes)} {text.remaining}</span>
+            <span>{text.timeRemaining}: {formatDuration(remainingSeconds, language)}</span>
+          </div>
+        </div>
+      )}
+
       <div className="settings-row">
         <label>
           <span>{text.validFor}</span>
@@ -503,7 +656,7 @@ export function TransferPanel({ language }: { language: Language }) {
         {text.shareLink}
       </button>
 
-      <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" />{text.privacy}</p>
+      <p className="privacy-note"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacy}</span></p>
     </section>
   );
 }

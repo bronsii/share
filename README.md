@@ -1,100 +1,53 @@
-# vinext-starter
+# Bronsinger Share
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Öffentlicher, registrierungsfreier Dateiaustausch mit clientseitiger Ende-zu-Ende-Verschlüsselung und automatischem Ablauf.
 
-## Prerequisites
+## Sicherheitsmodell
 
-- Node.js `>=22.13.0`
+Neue Übertragungen verwenden das versionierte Format `v1`:
 
-## Quick Start
+- Der Browser erzeugt pro Übertragung einen zufälligen 256-Bit-Schlüssel.
+- Neue Transfer- und Datei-IDs besitzen 128 Zufallsbits. Ältere 20-stellige IDs bleiben aus Kompatibilitätsgründen gültig.
+- Der Schlüssel steht ausschließlich im URL-Fragment (`#v1.…`). URL-Fragmente werden bei HTTP-Anfragen nicht an den Server übertragen.
+- Dateinamen, MIME-Typen und die optionale Notiz werden gemeinsam mit AES-256-GCM verschlüsselt.
+- Dateien werden in 4-MiB-Blöcken mit AES-256-GCM verschlüsselt. Jeder Block besitzt einen 16-Byte-Authentifizierungstag.
+- Jede Datei erhält eine zufällige 96-Bit-Nonce-Basis. Der jeweilige Blockindex wird zur Basis addiert, sodass innerhalb einer Datei kein Nonce wiederverwendet wird.
+- Der Server speichert nur Chiffretext, verschlüsselte Metadaten, Dateianzahl, verschlüsselte und unverschlüsselte Größen sowie Ablauf- und Betriebsdaten.
+- Downloads werden blockweise im Browser entschlüsselt und über einen Service Worker mit Backpressure direkt in den Browser-Download gestreamt.
+
+Der unverschlüsselte Upload-Endpunkt ist deaktiviert. Bereits vorhandene ältere Freigaben ohne `encryption`-Eintrag im Manifest bleiben herunterladbar.
+
+## Grenzen des Modells
+
+- Wer den vollständigen Freigabelink besitzt, besitzt auch den Schlüssel und kann die Dateien lesen.
+- Ein verlorener Schlüssel kann nicht wiederhergestellt werden.
+- Der Server sieht weiterhin IP-Adressen auf Netzwerkebene, Zeitpunkte, Dateianzahl und Größen.
+- Für Missbrauchsschutz wird die Client-IP mit einem lokalen geheimen Schlüssel pseudonymisiert. Die Rate-Limit-Dateien enthalten nicht die ursprüngliche IP-Adresse und werden nach Ablauf automatisch bereinigt.
+- Die Webanwendung wird vom Server ausgeliefert. Ein künftig kompromittierter Server könnte verändertes JavaScript ausliefern. Deshalb gehören sichere Deployments, eine restriktive CSP, kontrollierte Abhängigkeiten und unabhängige Sicherheitsprüfungen zum Vertrauensmodell.
+- Mehrere verschlüsselte Dateien werden derzeit einzeln heruntergeladen; der Server kann daraus mangels Schlüssel kein ZIP erstellen.
+
+## Betrieb
+
+Voraussetzung ist Node.js `>=22.13.0`.
 
 ```bash
-npm install
-npm run dev
+npm ci
+npm run typecheck
+npm run lint
 npm run build
+npm start
 ```
 
-This starter does not use `wrangler.jsonc`.
+Produktiv setzt `SHARED_ROOT` das Datenverzeichnis. Abgelaufene und verwaiste Übertragungen werden mit folgendem Befehl bereinigt:
 
-## Included Shape
-
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run cleanup
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+Neue Uploads reservieren nicht mehr allein aufgrund der angekündigten Dateigröße den gesamten Speicher. Vor dem Start und vor jedem geschriebenen Block wird freier Speicher geprüft; 5 GiB bleiben als Sicherheitsreserve unberührt. Pro Client gelten höchstens zwei unvollständige Uploads, 20 GiB angekündigtes Datenvolumen pro 24 Stunden und begrenzte Parallelität. Unvollständige Uploads ohne Aktivität werden nach zwei Stunden gelöscht.
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+`SHARE_ADMIN_CODE` muss als lange, einzigartige Passphrase gesetzt werden. Admin-Anmeldeversuche werden persistent pro Client und global begrenzt. Die Session-Cookies sind `Secure`, `HttpOnly`, `SameSite=Strict`, auf den Host gebunden und zwei Stunden gültig.
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+Geprüfte, restriktive systemd-Units liegen unter `deploy/`. Ihre Installation benötigt Root-Rechte und ist in `deploy/README.md` beschrieben.
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+Nach einem Produktions-Build muss der laufende Next.js-Prozess neu gestartet werden, damit HTML und gehashte Assets aus demselben Build stammen.

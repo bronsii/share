@@ -1,7 +1,9 @@
 import "server-only";
 
-import type { Dirent } from "node:fs";
-import { access, mkdir, readFile, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { createReadStream, createWriteStream, type Dirent } from "node:fs";
+import { access, chmod, mkdir, readFile, readdir, rename, rm, stat, statfs, truncate, writeFile } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import path from "node:path";
 
 export type TransferFile = {
@@ -10,6 +12,7 @@ export type TransferFile = {
   storedName: string;
   size: number;
   type: string;
+  plaintextSize?: number;
 };
 
 export type TransferManifest = {
@@ -19,12 +22,14 @@ export type TransferManifest = {
   expiresAt: string;
   message: string;
   files: TransferFile[];
+  encryption?: { version: 1; metadata: string; chunkSize: number };
   views?: number;
   downloads?: number;
 };
 
 export type UploadSession = TransferManifest & {
   storageReservationId?: string;
+  security?: { ownerKey: string };
 };
 
 export type AdminTransfer = {
@@ -41,10 +46,10 @@ export type AdminTransfer = {
 
 const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
 const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
-const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
-const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;
+const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--((?:[a-f0-9]{20}|[a-f0-9]{32}))$/;
+const FILE_ID_PATTERN = /^(?:[a-f0-9]{20}|[a-f0-9]{32})$/;
 const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
-const INCOMPLETE_UPLOAD_MAX_IDLE_MS = 12 * 60 * 60 * 1000;
+const INCOMPLETE_UPLOAD_MAX_IDLE_MS = 2 * 60 * 60 * 1000;
 const STORAGE_RESERVATION_PATTERN = /^[a-f0-9]{32}$/;
 const STORAGE_RESERVATION_MAX_IDLE_MS = INCOMPLETE_UPLOAD_MAX_IDLE_MS;
 
@@ -59,6 +64,7 @@ type StorageReservation = {
 };
 
 export class InsufficientStorageError extends Error {}
+export class UploadOffsetConflictError extends Error {}
 
 function isMissingPathError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT";
@@ -120,8 +126,12 @@ export function createFolderName(date = new Date()) {
   return `${value("year")}-${value("month")}-${value("day")}_${value("hour")}-${value("minute")}-${value("second")}-${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
 
+export function createOpaqueId() {
+  return randomBytes(16).toString("hex");
+}
+
 export function createTransferId(folderName: string) {
-  return `${folderName}--${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`;
+  return `${folderName}--${createOpaqueId()}`;
 }
 
 export function sanitizeFileName(name: string) {
@@ -172,7 +182,7 @@ export async function getUploadSession(id: string): Promise<UploadSession | null
 }
 
 export async function writeUploadSession(session: UploadSession) {
-  await writeFile(uploadSessionPath(session.folderName), JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx" });
+  await writeFile(uploadSessionPath(session.folderName), JSON.stringify(session, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
 }
 
 export async function getUploadFile(transferId: string, fileId: string) {
@@ -185,6 +195,7 @@ export async function getUploadFile(transferId: string, fileId: string) {
   let uploaded = 0;
   try {
     uploaded = (await stat(filePath)).size;
+    uploaded = await normalizeEncryptedUploadSize(session, file, filePath, uploaded);
   } catch {
     // Die Datei wird mit dem ersten Abschnitt angelegt.
   }
@@ -194,11 +205,21 @@ export async function getUploadFile(transferId: string, fileId: string) {
 export async function getUploadProgress(session: UploadSession) {
   return Promise.all(session.files.map(async (file) => {
     try {
-      return { id: file.id, uploaded: (await stat(storedFilePath(session.folderName, file.storedName))).size };
+      const filePath = storedFilePath(session.folderName, file.storedName);
+      const uploaded = await normalizeEncryptedUploadSize(session, file, filePath, (await stat(filePath)).size);
+      return { id: file.id, uploaded };
     } catch {
       return { id: file.id, uploaded: 0 };
     }
   }));
+}
+
+async function normalizeEncryptedUploadSize(session: UploadSession, file: TransferFile, filePath: string, uploaded: number) {
+  if (!session.encryption || !file.plaintextSize || uploaded === file.size) return uploaded;
+  const cipherChunkSize = session.encryption.chunkSize + 16;
+  const safeUploaded = Math.floor(uploaded / cipherChunkSize) * cipherChunkSize;
+  if (safeUploaded !== uploaded) await truncate(filePath, safeUploaded);
+  return safeUploaded;
 }
 
 async function readStorageReservations() {
@@ -261,8 +282,57 @@ async function legacyUploadReservationBytes(activeReservationIds: Set<string>) {
 async function updateStorageReservation(reservation: StorageReservation) {
   const finalPath = storageReservationPath(reservation.id);
   const temporaryPath = `${finalPath}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporaryPath, JSON.stringify(reservation), { encoding: "utf8", flag: "wx" });
+  await writeFile(temporaryPath, JSON.stringify(reservation), { encoding: "utf8", flag: "wx", mode: 0o600 });
   await rename(temporaryPath, finalPath);
+}
+
+export async function ensureStorageCapacity(requiredBytes: number) {
+  if (!Number.isSafeInteger(requiredBytes) || requiredBytes <= 0) throw new Error("Ungültige Uploadgröße.");
+  return withStorageCapacityLock(async () => {
+    await mkdir(SHARED_ROOT, { recursive: true, mode: 0o700 });
+    await chmod(SHARED_ROOT, 0o700).catch(() => undefined);
+    const fileSystem = await statfs(SHARED_ROOT);
+    const availableBytes = fileSystem.bavail * fileSystem.bsize;
+    if (!Number.isSafeInteger(availableBytes) || availableBytes < requiredBytes + STORAGE_RESERVE_BYTES) {
+      throw new InsufficientStorageError("Auf der VPS ist nicht genug freier Speicher für diese Übertragung.");
+    }
+  });
+}
+
+export async function appendUploadChunk(
+  targetPath: string,
+  temporaryPath: string,
+  expectedOffset: number,
+  length: number,
+) {
+  return withStorageCapacityLock(async () => {
+    let currentSize = 0;
+    try {
+      currentSize = (await stat(targetPath)).size;
+    } catch (error) {
+      if (!isMissingPathError(error)) throw error;
+    }
+    if (currentSize !== expectedOffset) throw new UploadOffsetConflictError("Upload-Position wurde zwischenzeitlich geändert.");
+
+    const fileSystem = await statfs(SHARED_ROOT);
+    const availableBytes = fileSystem.bavail * fileSystem.bsize;
+    if (!Number.isSafeInteger(availableBytes) || availableBytes < length + STORAGE_RESERVE_BYTES) {
+      throw new InsufficientStorageError("Auf der VPS ist nicht genug freier Speicher für diesen Dateiabschnitt.");
+    }
+
+    try {
+      await pipeline(
+        createReadStream(temporaryPath),
+        createWriteStream(targetPath, { flags: "a", mode: 0o600 }),
+      );
+      const uploaded = (await stat(targetPath)).size;
+      if (uploaded !== expectedOffset + length) throw new Error("Dateiabschnitt wurde nicht vollständig angehängt.");
+      return uploaded;
+    } catch (error) {
+      await truncate(targetPath, expectedOffset).catch(() => undefined);
+      throw error;
+    }
+  });
 }
 
 export async function reserveStorageCapacity(requiredBytes: number) {
@@ -289,6 +359,7 @@ export async function reserveStorageCapacity(requiredBytes: number) {
     await writeFile(storageReservationPath(reservation.id), JSON.stringify(reservation), {
       encoding: "utf8",
       flag: "wx",
+      mode: 0o600,
     });
     return reservation.id;
   });
@@ -324,16 +395,20 @@ export async function finishUploadSession(session: UploadSession) {
   if (progress.some((item, index) => item.uploaded !== session.files[index].size)) {
     throw new Error("Der Upload ist noch nicht vollst\u00e4ndig.");
   }
-  const { storageReservationId, ...manifest } = session;
+  const storageReservationId = session.storageReservationId;
+  const manifest: TransferManifest & Pick<UploadSession, "storageReservationId" | "security"> = { ...session };
+  delete manifest.storageReservationId;
+  delete manifest.security;
   await writeTransferManifest(manifest);
   await rm(uploadSessionPath(session.folderName), { force: true });
   await releaseStorageReservation(storageReservationId);
 }
 
 export async function prepareTransferFolder(folderName: string) {
-  await mkdir(SHARED_ROOT, { recursive: true });
+  await mkdir(SHARED_ROOT, { recursive: true, mode: 0o700 });
+  await chmod(SHARED_ROOT, 0o700).catch(() => undefined);
   const folder = transferFolder(folderName);
-  await mkdir(folder, { recursive: false });
+  await mkdir(folder, { recursive: false, mode: 0o700 });
   return folder;
 }
 
@@ -345,7 +420,7 @@ export function storedFilePath(folderName: string, storedName: string) {
 export async function writeTransferManifest(manifest: TransferManifest) {
   const finalManifestPath = manifestPath(manifest.folderName);
   const temporaryManifestPath = `${finalManifestPath}.tmp`;
-  await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx" });
+  await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), { encoding: "utf8", flag: "wx", mode: 0o600 });
   await rename(temporaryManifestPath, finalManifestPath);
 }
 
@@ -364,6 +439,7 @@ export async function incrementTransferStat(id: string, statName: "views" | "dow
       await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), {
         encoding: "utf8",
         flag: "wx",
+        mode: 0o600,
       });
       await rename(temporaryManifestPath, finalManifestPath);
       return true;
@@ -461,6 +537,22 @@ export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
   return transfers
     .filter((transfer): transfer is AdminTransfer => transfer !== null)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function countIncompleteUploadSessions(ownerKey?: string) {
+  await mkdir(SHARED_ROOT, { recursive: true, mode: 0o700 });
+  const entries = await readdir(SHARED_ROOT, { withFileTypes: true });
+  let count = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !FOLDER_PATTERN.test(entry.name)) continue;
+    try {
+      const session = JSON.parse(await readFile(uploadSessionPath(entry.name), "utf8")) as UploadSession;
+      if (!ownerKey || session.security?.ownerKey === ownerKey) count += 1;
+    } catch {
+      // Vollständige oder gleichzeitig entfernte Übertragungen zählen nicht.
+    }
+  }
+  return count;
 }
 
 export async function getStoredFile(transferId: string, fileId: string) {
