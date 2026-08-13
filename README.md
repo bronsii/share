@@ -7,6 +7,7 @@
 Neue Übertragungen verwenden das versionierte Format `v1`:
 
 - Der Browser erzeugt pro Übertragung einen zufälligen 256-Bit-Schlüssel.
+- Neue Transfer- und Datei-IDs besitzen 128 Zufallsbits. Ältere 20-stellige IDs bleiben aus Kompatibilitätsgründen gültig.
 - Der Schlüssel steht ausschließlich im URL-Fragment (`#v1.…`). URL-Fragmente werden bei HTTP-Anfragen nicht an den Server übertragen.
 - Dateinamen, MIME-Typen und die optionale Notiz werden gemeinsam mit AES-256-GCM verschlüsselt.
 - Dateien werden in 4-MiB-Blöcken mit AES-256-GCM verschlüsselt. Jeder Block besitzt einen 16-Byte-Authentifizierungstag.

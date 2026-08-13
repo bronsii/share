@@ -3,6 +3,7 @@ import {
   cleanupExpiredTransfers,
   countIncompleteUploadSessions,
   createFolderName,
+  createOpaqueId,
   createTransferId,
   ensureStorageCapacity,
   InsufficientStorageError,
@@ -141,7 +142,7 @@ export async function POST(request: Request) {
       folderPrepared = true;
 
       const files: TransferFile[] = body.files!.map((file, index) => ({
-        id: crypto.randomUUID().replaceAll("-", "").slice(0, 20),
+        id: createOpaqueId(),
         name: `Verschlüsselte Datei ${index + 1}`,
         storedName: `${crypto.randomUUID().replaceAll("-", "")}.bin`,
         size: file.size!,

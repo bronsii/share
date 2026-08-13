@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream, type Dirent } from "node:fs";
 import { access, chmod, mkdir, readFile, readdir, rename, rm, stat, statfs, truncate, writeFile } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
@@ -45,8 +46,8 @@ export type AdminTransfer = {
 
 const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
 const FOLDER_PATTERN = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}$/;
-const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--([a-f0-9]{20})$/;
-const FILE_ID_PATTERN = /^[a-f0-9]{20}$/;
+const TRANSFER_ID_PATTERN = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3})--((?:[a-f0-9]{20}|[a-f0-9]{32}))$/;
+const FILE_ID_PATTERN = /^(?:[a-f0-9]{20}|[a-f0-9]{32})$/;
 const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
 const INCOMPLETE_UPLOAD_MAX_IDLE_MS = 2 * 60 * 60 * 1000;
 const STORAGE_RESERVATION_PATTERN = /^[a-f0-9]{32}$/;
@@ -125,8 +126,12 @@ export function createFolderName(date = new Date()) {
   return `${value("year")}-${value("month")}-${value("day")}_${value("hour")}-${value("minute")}-${value("second")}-${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
 
+export function createOpaqueId() {
+  return randomBytes(16).toString("hex");
+}
+
 export function createTransferId(folderName: string) {
-  return `${folderName}--${crypto.randomUUID().replaceAll("-", "").slice(0, 20)}`;
+  return `${folderName}--${createOpaqueId()}`;
 }
 
 export function sanitizeFileName(name: string) {
