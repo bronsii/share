@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: origin },
-    icons: { icon: "/favicon.svg?v=2", shortcut: "/favicon.svg?v=2" },
+    icons: { icon: "/favicon.svg?v=3", shortcut: "/favicon.svg?v=3" },
     openGraph: { title, description, type: "website", url: origin, images: [{ url: `${origin}/og.png`, width: 1200, height: 630, alt: language === "de" ? "Sendebude - Sicher Daten weitergeben" : "Sendebude - Share files securely" }] },
     twitter: { card: "summary_large_image", title, description, images: [`${origin}/og.png`] },
   };
