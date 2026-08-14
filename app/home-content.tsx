@@ -50,6 +50,16 @@ const heroCopy = {
 export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }) {
   const [language, changeLanguage] = useUiLanguage(initialLanguage);
   const text = heroCopy[language];
+  const renderFeatures = (placement: "primary" | "mobile") => (
+    <ul className={`hero-features hero-features-${placement}`}>
+      {text.features.map((feature) => (
+        <li key={feature.label}>
+          <i className="feature-dot" aria-hidden="true" />
+          <span>{"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}{feature.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
     <main className="compact-page">
@@ -71,20 +81,14 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
         <div className="hero-grid compact-grid">
           <div className="hero-copy compact-copy">
             <h1 className="secure-heading">
-              {text.firstLine}
-              <span>{text.secondLine}</span>
+              {text.firstLine}{" "}
+              <span>{text.secondLine}</span>{" "}
               <span className="hero-third-line">{text.thirdLine}</span>
             </h1>
-            <ul className="hero-features">
-              {text.features.map((feature) => (
-                <li key={feature.label}>
-                  <i className="feature-dot" aria-hidden="true" />
-                  <span>{"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}{feature.label}</span>
-                </li>
-              ))}
-            </ul>
+            {renderFeatures("primary")}
           </div>
           <TransferPanel language={language} />
+          {renderFeatures("mobile")}
         </div>
       </section>
       <a className="admin-lock-link" href="/verwaltung" aria-label={text.adminLabel} title={language === "de" ? "Verwaltung" : "Administration"}>
