@@ -9,8 +9,8 @@ import { TransferPanel } from "./transfer-panel";
 const heroCopy = {
   de: {
     firstLine: "Upload.",
-    secondLine: "Teilen.",
-    lead: "Kostenlos. Sicher. Ohne Registrierung. Bis zu 5\u00a0GB.",
+    secondLine: "Sicher teilen.",
+    lead: "Kostenlos. Ohne Registrierung. Bis zu 5\u00a0GB.",
     hosting: "Hosted in Germany.",
     languageLabel: "Sprache wählen",
     flagLabel: "Deutschlandflagge",
@@ -19,8 +19,8 @@ const heroCopy = {
   },
   en: {
     firstLine: "Upload.",
-    secondLine: "Share.",
-    lead: "Free. Secure. No registration. Up to 5\u00a0GB.",
+    secondLine: "Share securely.",
+    lead: "Free. No registration. Up to 5\u00a0GB.",
     hosting: "Hosted in Germany.",
     languageLabel: "Choose language",
     flagLabel: "Flag of Germany",
@@ -52,7 +52,7 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
 
         <div className="hero-grid compact-grid">
           <div className="hero-copy compact-copy">
-            <h1 className="is-inline">
+            <h1 className="secure-heading">
               {text.firstLine}
               <span>{text.secondLine}</span>
             </h1>
