@@ -68,7 +68,7 @@ const translations = {
     dropFiles: "Dateien hier ablegen",
     clickToChoose: "oder klicken, um auszuwählen",
     selectedFiles: "Ausgewählte Dateien",
-    selected: "ausgewählt",
+    ofMaximum: "von 5\u00a0GB",
     uploaded: "hochgeladen",
     perSecond: "pro Sekunde",
     remaining: "verbleibend",
@@ -123,7 +123,7 @@ const translations = {
     dropFiles: "Drop files here",
     clickToChoose: "or click to choose",
     selectedFiles: "Selected files",
-    selected: "selected",
+    ofMaximum: "of 5\u00a0GB",
     uploaded: "uploaded",
     perSecond: "per second",
     remaining: "remaining",
@@ -910,7 +910,7 @@ export function TransferPanel({ language }: { language: Language }) {
         <div className="selection-counter" aria-live="polite">
           <span>{files.length} {files.length === 1 ? text.file : text.files}</span>
           <span>
-            {uploading ? <><strong>{formatBytes(uploadedBytes)}</strong> / {formatBytes(totalSize)} {text.uploaded}</> : <><strong>{formatBytes(totalSize)}</strong> {text.selected}</>}
+            {uploading ? <><strong>{formatBytes(uploadedBytes)}</strong> / {formatBytes(totalSize)} {text.uploaded}</> : <><strong>{formatBytes(totalSize)}</strong> {text.ofMaximum}</>}
           </span>
         </div>
       )}
