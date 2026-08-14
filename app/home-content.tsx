@@ -10,7 +10,7 @@ const heroCopy = {
   de: {
     firstLine: "Upload.",
     secondLine: "Teilen.",
-    lead: "Kostenlos. Ohne Registrierung. Bis zu 5\u00a0GB.",
+    lead: "Kostenlos. Sicher. Ohne Registrierung. Bis zu 5\u00a0GB.",
     hosting: "Hosted in Germany.",
     languageLabel: "Sprache wählen",
     flagLabel: "Deutschlandflagge",
@@ -20,7 +20,7 @@ const heroCopy = {
   en: {
     firstLine: "Upload.",
     secondLine: "Share.",
-    lead: "Free. No registration. Up to 5\u00a0GB.",
+    lead: "Free. Secure. No registration. Up to 5\u00a0GB.",
     hosting: "Hosted in Germany.",
     languageLabel: "Choose language",
     flagLabel: "Flag of Germany",
