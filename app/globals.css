@@ -674,13 +674,19 @@ a { color: inherit; text-decoration: none; }
   .site-header, .download-header { height: 76px; }
   .main-nav a:first-child { display: none; }
   .main-nav { gap: 0; }
-  .hero-grid { margin-top: 24px; gap: 39px; }
+  .compact-hero { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+  .hero-grid { width: 100%; min-width: 0; margin-top: 18px; gap: 30px; }
+  .hero-copy, .compact-copy { width: 100%; min-width: 0; padding-bottom: 0; }
   .eyebrow { margin-bottom: 18px; }
   .hero-copy h1 { font-size: clamp(43px, 13vw, 58px); }
-  .hero-lead { margin-block: 21px 23px; font-size: 16px; }
+  .compact-copy h1.is-inline { width: 100%; max-width: 100%; font-size: clamp(30px, 9.8vw, 43px); }
+  .hero-lead, .compact-copy .hero-lead { width: 100%; max-width: 100%; margin-block: 17px 0; font-size: clamp(13.5px, 4.2vw, 16px); overflow-wrap: anywhere; }
   .confidence-list { gap: 8px 14px; font-size: 11.5px; }
-  .transfer-card { min-height: 0; padding: 21px; border-radius: 19px; }
-  .file-row { grid-template-columns: 30px minmax(0,1fr) 42px 68px 58px; }
+  .transfer-card { min-width: 0; min-height: 0; padding: 21px; border-radius: 19px; }
+  .card-heading { gap: 10px; }
+  .card-heading > div { min-width: 0; }
+  .file-row { grid-template-columns: 30px minmax(0,1fr) 42px 58px; }
+  .file-speed { display: none; }
   .file-row .file-size { display: none; }
   .card-heading h2, .result-card h2 { font-size: 20px; }
   .dropzone { min-height: 105px; padding: 16px; }
