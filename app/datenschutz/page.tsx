@@ -7,7 +7,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const language = preferredUiLanguage(requestHeaders.get("accept-language"));
   return {
-    title: language === "de" ? "Datenschutz | Share" : "Privacy | Share",
+    title: language === "de" ? "Datenschutz | Sendebude" : "Privacy | Sendebude",
     description: language === "de"
       ? "Wie Share Dateien schützt, welche Betriebsdaten verarbeitet werden und wann Daten gelöscht werden."
       : "How Share protects files, which operational data is processed, and when data is deleted.",
