@@ -1,0 +1,106 @@
+name: Fehler melden
+description: Einen reproduzierbaren Fehler mit sicheren Testdaten melden
+title: "[Bug]: "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deine Meldung. **Füge niemals einen vollständigen Freigabelink ein:** Das Fragment nach `#` enthält den Entschlüsselungsschlüssel. Entferne außerdem echte Dateien, personenbezogene Daten, Admin-Codes, Umgebungsvariablen und Zugangsdaten aus Texten, Bildern und Protokollen.
+
+        Vermutete Sicherheitslücken bitte nicht öffentlich melden. Verwende dafür die Hinweise in der [Sicherheitsrichtlinie](https://github.com/bronsii/share/security/policy).
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Schutz vertraulicher Daten
+      options:
+        - label: Ich habe Freigabelinks, Schlüssel, echte Dateien, personenbezogene Daten und Zugangsdaten aus dieser Meldung entfernt.
+          required: true
+        - label: Diese Meldung beschreibt keine Sicherheitslücke.
+          required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Umgebung
+      description: Wo ist der Fehler aufgetreten?
+      options:
+        - sendebude.de
+        - Eigene Installation
+        - Lokale Entwicklung
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Betroffener Bereich
+      options:
+        - Startseite oder Darstellung
+        - Upload oder Wiederaufnahme
+        - Freigabelink oder Download
+        - Verwaltung
+        - Installation oder Betrieb
+        - Anderer Bereich
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Fehlerbeschreibung
+      description: Was ist passiert?
+      placeholder: Kurze, eindeutige Beschreibung ohne vertrauliche Daten
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Schritte zum Nachstellen
+      description: Verwende nur künstliche Testdaten und keinen echten Freigabelink.
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Erwartetes Verhalten
+      placeholder: Was hätte stattdessen passieren sollen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Tatsächliches Verhalten
+      placeholder: Fehlermeldung oder sichtbares Ergebnis
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version oder Commit
+      description: Bei einer eigenen Installation möglichst den Commit-Hash angeben.
+      placeholder: z. B. cb3d655 oder aktuelles sendebude.de
+
+  - type: input
+    id: client
+    attributes:
+      label: Browser und Betriebssystem
+      placeholder: z. B. Firefox 141 unter Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Bereinigte Protokolle oder weitere Hinweise
+      description: Optional. Prüfe Text und Screenshots erneut auf Links, Schlüssel, Pfade, IP-Adressen und andere vertrauliche Angaben.

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke vertraulich melden
+    url: https://github.com/bronsii/share/security/policy
+    about: Keine Sicherheitslücken, Freigabelinks oder Schlüssel in einem öffentlichen Issue veröffentlichen.

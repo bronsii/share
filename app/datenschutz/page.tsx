@@ -9,8 +9,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: language === "de" ? "Datenschutz | Sendebude" : "Privacy | Sendebude",
     description: language === "de"
-      ? "Wie Share Dateien schützt, welche Betriebsdaten verarbeitet werden und wann Daten gelöscht werden."
-      : "How Share protects files, which operational data is processed, and when data is deleted.",
+      ? "Wie Sendebude Dateien schützt, welche Betriebsdaten verarbeitet werden und wann Daten gelöscht werden."
+      : "How Sendebude protects files, which operational data is processed, and when data is deleted.",
   };
 }
 
