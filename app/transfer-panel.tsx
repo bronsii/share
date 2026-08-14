@@ -850,7 +850,7 @@ export function TransferPanel({ language }: { language: Language }) {
           {copied ? <Check size={18} /> : <Send size={18} />}
           {copied ? text.linkCopied : text.shareAction}
         </button>
-        <a className="privacy-note privacy-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+        <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
         <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
       </section>
     );
@@ -979,7 +979,7 @@ export function TransferPanel({ language }: { language: Language }) {
         {text.shareLink}
       </button>
 
-      <a className="privacy-note privacy-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+      <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
     </section>
   );
 }
