@@ -11,8 +11,16 @@ const heroCopy = {
     firstLine: "daten.",
     secondLine: "sicher.",
     thirdLine: "teilen.",
-    lead: "Kostenlos. Ohne Registrierung. Bis zu 5\u00a0GB.",
-    hosting: "Hosted in Germany.",
+    features: [
+      { label: "Kostenlos" },
+      { label: "Ohne Registrierung" },
+      { label: "Bis zu 5\u00a0GB" },
+      { label: "Ende-zu-Ende verschlüsselt" },
+      { label: "Hosted in Germany", flag: true },
+      { label: "Automatische Löschung" },
+      { label: "Keine Werbe- oder Analyse-Tracker" },
+      { label: "Open Source geplant" },
+    ],
     languageLabel: "Sprache wählen",
     flagLabel: "Deutschlandflagge",
     homeLabel: "Startseite von sendebude.de",
@@ -22,8 +30,16 @@ const heroCopy = {
     firstLine: "data.",
     secondLine: "secure.",
     thirdLine: "share.",
-    lead: "Free. No registration. Up to 5\u00a0GB.",
-    hosting: "Hosted in Germany.",
+    features: [
+      { label: "Free" },
+      { label: "No registration" },
+      { label: "Up to 5\u00a0GB" },
+      { label: "End-to-end encrypted" },
+      { label: "Hosted in Germany", flag: true },
+      { label: "Automatic deletion" },
+      { label: "No advertising or analytics trackers" },
+      { label: "Open source planned" },
+    ],
     languageLabel: "Choose language",
     flagLabel: "Flag of Germany",
     homeLabel: "sendebude.de home page",
@@ -54,12 +70,19 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
 
         <div className="hero-grid compact-grid">
           <div className="hero-copy compact-copy">
-            <h1 className="secure-heading is-one-line">
-              {text.firstLine}{" "}
-              <span>{text.secondLine}</span>{" "}
+            <h1 className="secure-heading">
+              {text.firstLine}
+              <span>{text.secondLine}</span>
               <span className="hero-third-line">{text.thirdLine}</span>
             </h1>
-            <p className="hero-lead"><span>{text.lead}</span><span><i className="inline-germany-flag" role="img" aria-label={text.flagLabel} />{text.hosting}</span></p>
+            <ul className="hero-features">
+              {text.features.map((feature) => (
+                <li key={feature.label}>
+                  <i className="feature-dot" aria-hidden="true" />
+                  <span>{"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}{feature.label}</span>
+                </li>
+              ))}
+            </ul>
           </div>
           <TransferPanel language={language} />
         </div>
