@@ -29,6 +29,27 @@ printf 'Admin-Code: %s\n' "$admin_code"
 unset admin_code admin_session_secret proxy_secret
 ```
 
+## Impressumsdaten einmalig anlegen
+
+Die öffentlich angezeigten Impressumsdaten liegen ausschließlich in einer geschützten Serverdatei und nicht im Repository. Zuerst die Datei sicher anlegen und anschließend mit `sudoedit` befüllen:
+
+```bash
+sudo install -o root -g root -m 0600 /dev/null /etc/share-imprint.env
+sudoedit /etc/share-imprint.env
+```
+
+Erforderliches Format:
+
+```dotenv
+SHARE_IMPRINT_NAME=<Name>
+SHARE_IMPRINT_STREET=<Straße und Hausnummer>
+SHARE_IMPRINT_LOCALITY=<Postleitzahl und Ort>
+SHARE_IMPRINT_COUNTRY=<Land>
+SHARE_IMPRINT_EMAIL=<Kontaktadresse>
+```
+
+Keine dieser Variablen darf mit `NEXT_PUBLIC_` beginnen. Die Unit verweigert den Start, wenn eine Angabe fehlt.
+
 ## Anwendung und Cleanup installieren oder aktualisieren
 
 ```bash

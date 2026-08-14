@@ -6,6 +6,14 @@ import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { LanguageSwitch } from "../language-switch";
 
+type ImprintDetails = {
+  name: string;
+  street: string;
+  locality: string;
+  country: string;
+  email: string;
+};
+
 const imprintCopy = {
   de: {
     back: "Zurück zu Sendebude",
@@ -27,7 +35,13 @@ const imprintCopy = {
   },
 } as const;
 
-export function ImprintContent({ initialLanguage }: { initialLanguage: UiLanguage }) {
+export function ImprintContent({
+  initialLanguage,
+  details,
+}: {
+  initialLanguage: UiLanguage;
+  details: ImprintDetails;
+}) {
   const [language, changeLanguage] = useUiLanguage(initialLanguage);
   const copy = imprintCopy[language];
 
@@ -48,12 +62,12 @@ export function ImprintContent({ initialLanguage }: { initialLanguage: UiLanguag
           <article className="privacy-card">
             <div className="privacy-card-icon"><MapPin size={20} aria-hidden="true" /></div>
             <h2>{copy.addressTitle}</h2>
-            <p>[imprint name removed]<br />[imprint address removed]<br />[imprint locality removed]<br />Deutschland</p>
+            <p>{details.name}<br />{details.street}<br />{details.locality}<br />{details.country}</p>
           </article>
           <article className="privacy-card">
             <div className="privacy-card-icon"><Mail size={20} aria-hidden="true" /></div>
             <h2>{copy.contactTitle}</h2>
-            <p><a className="imprint-email" href="mailto:[imprint email removed]">[imprint email removed]</a></p>
+            <p><a className="imprint-email" href={`mailto:${details.email}`}>{details.email}</a></p>
           </article>
         </div>
       </section>
