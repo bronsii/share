@@ -54,9 +54,9 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
 
         <div className="hero-grid compact-grid">
           <div className="hero-copy compact-copy">
-            <h1 className="secure-heading">
-              {text.firstLine}
-              <span>{text.secondLine}</span>
+            <h1 className="secure-heading is-one-line">
+              {text.firstLine}{" "}
+              <span>{text.secondLine}</span>{" "}
               <span className="hero-third-line">{text.thirdLine}</span>
             </h1>
             <p className="hero-lead"><span>{text.lead}</span><span><i className="inline-germany-flag" role="img" aria-label={text.flagLabel} />{text.hosting}</span></p>

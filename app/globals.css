@@ -135,6 +135,7 @@ a { color: inherit; text-decoration: none; }
 .compact-grid { margin-top: 65px; }
 .compact-copy .eyebrow { margin: 0 0 20px; }
 .compact-copy .hero-lead { margin-bottom: 0; }
+.compact-copy { width: 100%; min-width: 0; container-type: inline-size; }
 .compact-copy h1 { width: max-content; margin-inline: auto; }
 .compact-copy .hero-lead { margin-inline: auto; text-align: center; }
 
@@ -257,6 +258,8 @@ a { color: inherit; text-decoration: none; }
 }
 .hero-copy h1 span { display: block; color: #f0a13a; }
 .hero-copy h1 span.hero-third-line { color: inherit; }
+.hero-copy h1.is-one-line { max-width: 100%; font-size: clamp(18px, 8cqw, 48px); white-space: nowrap; }
+.hero-copy h1.is-one-line span { display: inline; }
 .hero-copy h1.is-inline { white-space: nowrap; }
 .hero-copy h1.is-inline span { display: inline; margin-left: 0.22em; }
 .compact-copy h1.secure-heading { margin-inline: 0; text-align: left; }
