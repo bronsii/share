@@ -91,6 +91,7 @@ const translations = {
     recoveryMismatch: "Die ausgewählten Dateien stimmen nicht mit dem unterbrochenen Upload überein.",
     recoveryUnavailable: "Der unterbrochene Upload ist nicht mehr verfügbar. Bitte starte eine neue Übertragung.",
     privacyTitle: "Datenschutz",
+    imprintTitle: "Impressum",
     locale: "de-DE",
   },
   en: {
@@ -144,6 +145,7 @@ const translations = {
     recoveryMismatch: "The selected files do not match the interrupted upload.",
     recoveryUnavailable: "The interrupted upload is no longer available. Please start a new transfer.",
     privacyTitle: "Privacy",
+    imprintTitle: "Legal notice",
     locale: "en-GB",
   },
 } as const;
@@ -850,7 +852,10 @@ export function TransferPanel({ language }: { language: Language }) {
           {copied ? <Check size={18} /> : <Send size={18} />}
           {copied ? text.linkCopied : text.shareAction}
         </button>
-        <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+        <div className="sendebude-footer-links">
+          <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+          <a className="sendebude-data-link" href="/impressum"><FileText size={15} aria-hidden="true" /><span>{text.imprintTitle}</span></a>
+        </div>
         <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
       </section>
     );
@@ -979,7 +984,10 @@ export function TransferPanel({ language }: { language: Language }) {
         {text.shareLink}
       </button>
 
-      <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+      <div className="sendebude-footer-links">
+        <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+        <a className="sendebude-data-link" href="/impressum"><FileText size={15} aria-hidden="true" /><span>{text.imprintTitle}</span></a>
+      </div>
     </section>
   );
 }
