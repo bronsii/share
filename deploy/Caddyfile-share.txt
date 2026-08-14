@@ -8,3 +8,7 @@ sendebude.de {
 		header_up X-Share-Proxy-Secret {$SHARE_PROXY_SECRET}
 	}
 }
+
+www.sendebude.de {
+	redir https://sendebude.de{uri} permanent
+}

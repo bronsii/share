@@ -33,7 +33,7 @@ systemd-analyze security share.service --no-pager
 
 Der Laufzeitprozess erhält ausschließlich Schreibrechte auf `shared/`; dort gespeicherte Dateien dürfen nicht ausgeführt werden.
 
-Der Block in `Caddyfile-share.txt` ersetzt den bestehenden Block für `sendebude.de`. Er begrenzt jeden Anfragekörper bereits am Reverse Proxy auf 8 MB; die verschlüsselten Uploadblöcke sind ungefähr 4 MB groß. Caddy überschreibt außerdem `X-Share-Client-IP` und versieht die Weiterleitung mit `X-Share-Proxy-Secret`. Die Anwendung vertraut der Client-IP nur bei passendem Geheimnis. Anschließend:
+Der Block in `Caddyfile-share.txt` stellt `sendebude.de` bereit und leitet `www.sendebude.de` auf die Hauptdomain um. Er begrenzt jeden Anfragekörper bereits am Reverse Proxy auf 8 MB; die verschlüsselten Uploadblöcke sind ungefähr 4 MB groß. Caddy überschreibt außerdem `X-Share-Client-IP` und versieht die Weiterleitung mit `X-Share-Proxy-Secret`. Die Anwendung vertraut der Client-IP nur bei passendem Geheimnis. Anschließend:
 
 ```bash
 sudo caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
