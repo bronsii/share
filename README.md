@@ -60,3 +60,7 @@ Neue Uploads reservieren beim Start ihren noch benötigten Speicher. Die Reservi
 Geprüfte, restriktive systemd-Units liegen unter `deploy/`. Ihre Installation benötigt Root-Rechte und ist in `deploy/README.md` beschrieben.
 
 Nach einem Produktions-Build muss der laufende Next.js-Prozess neu gestartet werden, damit HTML und gehashte Assets aus demselben Build stammen.
+
+## Lizenz
+
+Sendebude ist freie Software unter der [GNU Affero General Public License Version 3](LICENSE) (`AGPL-3.0-only`). Du darfst den Code verwenden, untersuchen, verändern und weitergeben. Wenn du eine veränderte Version über ein Netzwerk anbietest, musst du den Nutzern auch den dazugehörigen Quellcode unter derselben Lizenz zugänglich machen.
