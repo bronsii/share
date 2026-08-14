@@ -1,6 +1,7 @@
 "use client";
 
-import { LockKeyhole } from "lucide-react";
+import { LockKeyhole, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { TransferPanel } from "./transfer-panel";
@@ -13,6 +14,7 @@ const heroCopy = {
     hosting: "Hosted in Germany.",
     languageLabel: "Sprache wählen",
     flagLabel: "Deutschlandflagge",
+    homeLabel: "Startseite von sendebude.de",
     adminLabel: "Private Verwaltung öffnen",
   },
   en: {
@@ -22,6 +24,7 @@ const heroCopy = {
     hosting: "Hosted in Germany.",
     languageLabel: "Choose language",
     flagLabel: "Flag of Germany",
+    homeLabel: "sendebude.de home page",
     adminLabel: "Open private administration",
   },
 } as const;
@@ -37,6 +40,10 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
         <div className="ambient ambient-two" />
 
         <header className="site-header">
+          <Link className="site-domain" href="/" aria-label={text.homeLabel}>
+            <span className="site-domain-mark"><ShieldCheck size={15} aria-hidden="true" /></span>
+            <span>sendebude.de</span>
+          </Link>
           <div className="language-switch" role="group" aria-label={text.languageLabel}>
             <button type="button" className={language === "de" ? "is-active" : ""} aria-pressed={language === "de"} onClick={() => changeLanguage("de")}>DE</button>
             <button type="button" className={language === "en" ? "is-active" : ""} aria-pressed={language === "en"} onClick={() => changeLanguage("en")}>EN</button>
