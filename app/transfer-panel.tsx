@@ -68,6 +68,7 @@ const translations = {
     dropFiles: "Dateien hier ablegen",
     clickToChoose: "oder klicken, um auszuwählen",
     selectedFiles: "Ausgewählte Dateien",
+    selected: "ausgewählt",
     uploaded: "hochgeladen",
     perSecond: "pro Sekunde",
     remaining: "verbleibend",
@@ -122,6 +123,7 @@ const translations = {
     dropFiles: "Drop files here",
     clickToChoose: "or click to choose",
     selectedFiles: "Selected files",
+    selected: "selected",
     uploaded: "uploaded",
     perSecond: "per second",
     remaining: "remaining",
@@ -905,8 +907,16 @@ export function TransferPanel({ language }: { language: Language }) {
       </div>
 
       {files.length > 0 && (
+        <div className="selection-counter" aria-live="polite">
+          <span>{files.length} {files.length === 1 ? text.file : text.files}</span>
+          <span>
+            {uploading ? <><strong>{formatBytes(uploadedBytes)}</strong> / {formatBytes(totalSize)} {text.uploaded}</> : <><strong>{formatBytes(totalSize)}</strong> {text.selected}</>}
+          </span>
+        </div>
+      )}
+
+      {files.length > 0 && (
         <div className="file-list" aria-label={text.selectedFiles}>
-          <div className="file-list-heading"><span>{files.length} {files.length === 1 ? text.file : text.files}</span><span>{formatBytes(totalSize)}</span></div>
           {files.map((file, index) => {
             const fileUploadedBytes = uploadedBytesForFile(index);
             const fileProgress = file.size ? Math.min(100, Math.round((fileUploadedBytes / file.size) * 100)) : 100;
