@@ -9,7 +9,7 @@ import { TransferPanel } from "./transfer-panel";
 const heroCopy = {
   de: {
     firstLine: "Upload.",
-    secondLine: "Share.",
+    secondLine: "Teilen.",
     lead: "Kostenlos. Ohne Registrierung. Bis zu 5\u00a0GB.",
     hosting: "Hosted in Germany.",
     languageLabel: "Sprache wählen",
