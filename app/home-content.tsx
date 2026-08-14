@@ -8,7 +8,7 @@ import { TransferPanel } from "./transfer-panel";
 
 const heroCopy = {
   de: {
-    firstLine: "upload.",
+    firstLine: "daten.",
     secondLine: "sicher. teilen.",
     lead: "Kostenlos. Ohne Registrierung. Bis zu 5\u00a0GB.",
     hosting: "Hosted in Germany.",
@@ -18,7 +18,7 @@ const heroCopy = {
     adminLabel: "Private Verwaltung öffnen",
   },
   en: {
-    firstLine: "upload.",
+    firstLine: "data.",
     secondLine: "secure. share.",
     lead: "Free. No registration. Up to 5\u00a0GB.",
     hosting: "Hosted in Germany.",
