@@ -21,6 +21,8 @@ import {
   ProxyConfigurationError,
   proxyConfigurationUnavailable,
   readJsonBody,
+  requestHasJsonContentType,
+  requestHasSameOrigin,
   RequestBodyTooLargeError,
 } from "@/lib/request-security";
 
@@ -39,6 +41,12 @@ type RemoveFileRequest = { encryption?: { version?: number; metadata?: string } 
 export async function PUT(request: Request, context: Context) {
   let clientKey: string;
   try {
+    if (!requestHasSameOrigin(request)) {
+      return NextResponse.json(
+        { error: "Anfrage nicht erlaubt." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     clientKey = await clientRateLimitKey(request);
   } catch (error) {
     if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
@@ -133,8 +141,20 @@ export async function PUT(request: Request, context: Context) {
 }
 
 export async function DELETE(request: Request, context: Context) {
-  const { id, fileId } = await context.params;
   try {
+    if (!requestHasSameOrigin(request)) {
+      return NextResponse.json(
+        { error: "Anfrage nicht erlaubt." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (!requestHasJsonContentType(request)) {
+      return NextResponse.json(
+        { error: "Die Anfrage muss JSON enthalten." },
+        { status: 415, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const { id, fileId } = await context.params;
     const body = await readJsonBody<RemoveFileRequest>(request, MAX_REMOVE_REQUEST_BYTES);
     if (body.encryption?.version !== 1
       || typeof body.encryption.metadata !== "string"
@@ -154,6 +174,7 @@ export async function DELETE(request: Request, context: Context) {
       })),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
     if (error instanceof UploadLastFileError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

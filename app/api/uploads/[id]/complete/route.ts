@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { finishUploadSession, getTransfer, getUploadSession, UploadIncompleteError } from "@/lib/storage";
+import {
+  ProxyConfigurationError,
+  proxyConfigurationUnavailable,
+  requestHasSameOrigin,
+} from "@/lib/request-security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +19,17 @@ function publicOrigin(request: Request) {
 }
 
 export async function POST(request: Request, context: Context) {
+  try {
+    if (!requestHasSameOrigin(request)) {
+      return NextResponse.json(
+        { error: "Anfrage nicht erlaubt." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+  } catch (error) {
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
+    throw error;
+  }
   const { id } = await context.params;
   const session = await getUploadSession(id);
   if (!session) {

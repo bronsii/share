@@ -240,6 +240,12 @@ export function requestHasSameOrigin(request: Request) {
   }
 }
 
+export function requestHasJsonContentType(request: Request) {
+  const contentType = request.headers.get("content-type");
+  if (!contentType) return false;
+  return contentType.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
 export class RequestBodyTooLargeError extends Error {}
 
 export async function readJsonBody<T>(request: Request, maximumBytes: number): Promise<T> {
