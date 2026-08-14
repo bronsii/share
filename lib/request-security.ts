@@ -22,11 +22,8 @@ type RateLimitOptions = {
   cost?: number;
 };
 
-export type RateLimitResult = {
+type RateLimitResult = {
   allowed: boolean;
-  limit: number;
-  remaining: number;
-  resetAt: number;
   retryAfter: number;
 };
 
@@ -215,16 +212,14 @@ export async function consumeRateLimit(options: RateLimitOptions): Promise<RateL
     const allowed = state.count + cost <= limit;
     if (allowed) state.count += cost;
     const temporaryPath = `${finalPath}.${randomBytes(8).toString("hex")}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify(state), { flag: "wx", mode: 0o600 });
-    await rename(temporaryPath, finalPath);
+    try {
+      await writeFile(temporaryPath, JSON.stringify(state), { flag: "wx", mode: 0o600 });
+      await rename(temporaryPath, finalPath);
+    } finally {
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+    }
     const retryAfter = Math.max(1, Math.ceil((state.resetAt - now) / 1000));
-    return {
-      allowed,
-      limit,
-      remaining: Math.max(0, limit - state.count),
-      resetAt: state.resetAt,
-      retryAfter,
-    };
+    return { allowed, retryAfter };
   });
 }
 

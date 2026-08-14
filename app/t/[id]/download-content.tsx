@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Clock3, Download, FileArchive, FileImage, FileText, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Clock3, Download, FileArchive, ShieldCheck } from "lucide-react";
+import { FileGlyph } from "@/app/file-glyph";
+import { LanguageSwitch } from "@/app/language-switch";
+import { formatBytes } from "@/lib/format-bytes";
 import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { downloadCopy } from "./download-copy";
@@ -23,30 +26,6 @@ type Props = {
   transfer?: PublicTransfer;
 };
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} GB`;
-  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
-}
-
-function FileGlyph({ name, type }: { name: string; type: string }) {
-  const extension = name.split(".").pop()?.toLowerCase();
-  if (type.startsWith("image/")) return <FileImage size={22} />;
-  if (["zip", "rar", "7z", "tar", "gz"].includes(extension ?? "")) return <FileArchive size={22} />;
-  return <FileText size={22} />;
-}
-
-function LanguageSwitch({ language, onChange }: { language: UiLanguage; onChange: (language: UiLanguage) => void }) {
-  const copy = downloadCopy[language];
-  return (
-    <div className="language-switch" role="group" aria-label={copy.languageLabel}>
-      <button type="button" className={language === "de" ? "is-active" : ""} aria-pressed={language === "de"} onClick={() => onChange("de")}>DE</button>
-      <button type="button" className={language === "en" ? "is-active" : ""} aria-pressed={language === "en"} onClick={() => onChange("en")}>EN</button>
-    </div>
-  );
-}
-
 export function DownloadContent({ initialLanguage, state, transfer }: Props) {
   const [language, changeLanguage] = useUiLanguage(initialLanguage);
   const copy = downloadCopy[language];
@@ -56,9 +35,9 @@ export function DownloadContent({ initialLanguage, state, transfer }: Props) {
     return (
       <main className="download-page">
         <div className="download-ambient" />
-        <header className="download-header download-header-localized">
+        <header className="download-header">
           <Link className="back-link" href="/"><ArrowLeft size={16} /> {copy.home}</Link>
-          <LanguageSwitch language={language} onChange={changeLanguage} />
+          <LanguageSwitch language={language} label={copy.languageLabel} onChange={changeLanguage} />
         </header>
         <section className="empty-transfer-card">
           <div className="empty-clock"><Clock3 size={28} /></div>
@@ -82,9 +61,9 @@ export function DownloadContent({ initialLanguage, state, transfer }: Props) {
     <main className="download-page">
       <TransferViewTracker id={transfer.id} />
       <div className="download-ambient" />
-      <header className="download-header download-header-localized">
+      <header className="download-header">
         <Link className="back-link" href="/"><ArrowLeft size={16} /> {copy.home}</Link>
-        <LanguageSwitch language={language} onChange={changeLanguage} />
+        <LanguageSwitch language={language} label={copy.languageLabel} onChange={changeLanguage} />
       </header>
       {transfer.encryption?.version === 1 ? (
         <EncryptedTransferPanel

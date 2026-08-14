@@ -4,6 +4,7 @@ import { LockKeyhole, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
+import { LanguageSwitch } from "./language-switch";
 import { TransferPanel } from "./transfer-panel";
 
 const heroCopy = {
@@ -62,20 +63,14 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
   );
 
   return (
-    <main className="compact-page">
+    <main>
       <section className="hero-shell compact-hero">
-        <div className="ambient ambient-one" />
-        <div className="ambient ambient-two" />
-
         <header className="site-header">
           <Link className="site-domain" href="/" aria-label={text.homeLabel}>
             <span className="site-domain-mark"><ShieldCheck size={15} aria-hidden="true" /></span>
             <span>sendebude.de</span>
           </Link>
-          <div className="language-switch" role="group" aria-label={text.languageLabel}>
-            <button type="button" className={language === "de" ? "is-active" : ""} aria-pressed={language === "de"} onClick={() => changeLanguage("de")}>DE</button>
-            <button type="button" className={language === "en" ? "is-active" : ""} aria-pressed={language === "en"} onClick={() => changeLanguage("en")}>EN</button>
-          </div>
+          <LanguageSwitch language={language} label={text.languageLabel} onChange={changeLanguage} />
         </header>
 
         <div className="hero-grid compact-grid">

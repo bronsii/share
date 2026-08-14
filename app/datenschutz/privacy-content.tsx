@@ -4,10 +4,11 @@ import Link from "next/link";
 import { ArrowLeft, Code2, EyeOff, LockKeyhole, Server, ShieldCheck, Trash2 } from "lucide-react";
 import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
+import { LanguageSwitch } from "../language-switch";
 
 const privacyCopy = {
   de: {
-    back: "Zurück zu Share",
+    back: "Zurück zu Sendebude",
     languageLabel: "Sprache wählen",
     kicker: "Sicherheit & Transparenz",
     title: "Datenschutz",
@@ -27,7 +28,7 @@ const privacyCopy = {
     sourceStatus: "Öffentliche Freigabe ausstehend",
   },
   en: {
-    back: "Back to Share",
+    back: "Back to Sendebude",
     languageLabel: "Choose language",
     kicker: "Security & transparency",
     title: "Privacy",
@@ -56,10 +57,7 @@ export function PrivacyContent({ initialLanguage }: { initialLanguage: UiLanguag
     <main className="privacy-page">
       <header className="privacy-header">
         <Link className="privacy-back" href="/"><ArrowLeft size={16} aria-hidden="true" />{copy.back}</Link>
-        <div className="language-switch" role="group" aria-label={copy.languageLabel}>
-          <button type="button" className={language === "de" ? "is-active" : ""} aria-pressed={language === "de"} onClick={() => changeLanguage("de")}>DE</button>
-          <button type="button" className={language === "en" ? "is-active" : ""} aria-pressed={language === "en"} onClick={() => changeLanguage("en")}>EN</button>
-        </div>
+        <LanguageSwitch language={language} label={copy.languageLabel} onChange={changeLanguage} />
       </header>
 
       <section className="privacy-shell">

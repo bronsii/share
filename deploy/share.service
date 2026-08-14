@@ -1,5 +1,5 @@
 [Unit]
-Description=Bronsinger Share Next.js application
+Description=Sendebude Next.js application
 After=network-online.target
 Wants=network-online.target
 
@@ -12,7 +12,7 @@ Environment=NODE_ENV=production
 Environment=SHARED_ROOT=/srv/apps/share/shared
 EnvironmentFile=/etc/share-admin.env
 EnvironmentFile=/etc/share-proxy.env
-ExecStartPre=/bin/sh -ec 'test "$${#SHARE_PROXY_SECRET}" -ge 32'
+ExecStartPre=/bin/sh -ec 'test "$${#SHARE_ADMIN_CODE}" -ge 16 && test "$${#SHARE_ADMIN_SESSION_SECRET}" -ge 32 && test "$${#SHARE_PROXY_SECRET}" -ge 32'
 ExecStart=/opt/node/bin/node /srv/apps/share/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
 Restart=on-failure
 RestartSec=5

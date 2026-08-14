@@ -1,7 +1,8 @@
 "use client";
 
-import { Download, FileArchive, FileImage, FileText, KeyRound, ShieldCheck } from "lucide-react";
+import { Download, KeyRound, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FileGlyph } from "@/app/file-glyph";
 import {
   decodeNoncePrefix,
   decryptChunk,
@@ -11,6 +12,7 @@ import {
   importTransferKey,
   PLAINTEXT_CHUNK_SIZE,
 } from "@/lib/e2e-crypto";
+import { formatBytes } from "@/lib/format-bytes";
 import type { UiLanguage } from "@/lib/ui-language";
 import { downloadCopy } from "./download-copy";
 
@@ -18,20 +20,6 @@ type EncryptedFile = { id: string; size: number; plaintextSize: number };
 type Props = { id: string; encryptedMetadata: string; files: EncryptedFile[]; expiresAt: string; language: UiLanguage };
 const DOWNLOAD_START_TIMEOUT_MS = 15_000;
 const DOWNLOAD_IDLE_TIMEOUT_MS = 120_000;
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} GB`;
-  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
-}
-
-function FileGlyph({ name, type }: { name: string; type: string }) {
-  const extension = name.split(".").pop()?.toLowerCase();
-  if (type.startsWith("image/")) return <FileImage size={22} />;
-  if (["zip", "rar", "7z", "tar", "gz"].includes(extension ?? "")) return <FileArchive size={22} />;
-  return <FileText size={22} />;
-}
 
 function validFileName(name: string) {
   return Boolean(name)

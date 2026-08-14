@@ -9,8 +9,6 @@ import { GCM_TAG_SIZE } from "@/lib/e2e-crypto";
 import { sanitizeFileName } from "@/lib/file-name.mjs";
 import { cleanupTransfersAtRoot, INCOMPLETE_UPLOAD_MAX_IDLE_MS } from "@/lib/storage-cleanup.mjs";
 
-export { sanitizeFileName } from "@/lib/file-name.mjs";
-
 export type TransferFile = {
   id: string;
   name: string;
@@ -312,8 +310,12 @@ async function legacyUploadReservationBytes(activeReservationIds: Set<string>) {
 async function updateStorageReservation(reservation: StorageReservation) {
   const finalPath = storageReservationPath(reservation.id);
   const temporaryPath = `${finalPath}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporaryPath, JSON.stringify(reservation), { encoding: "utf8", flag: "wx", mode: 0o600 });
-  await rename(temporaryPath, finalPath);
+  try {
+    await writeFile(temporaryPath, JSON.stringify(reservation), { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await rename(temporaryPath, finalPath);
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
 }
 
 export async function appendUploadChunk(
@@ -479,12 +481,12 @@ export async function prepareTransferFolder(folderName: string) {
   return folder;
 }
 
-export function storedFilePath(folderName: string, storedName: string) {
+function storedFilePath(folderName: string, storedName: string) {
   if (sanitizeFileName(storedName) !== storedName) throw new Error("Ungültiger Dateiname.");
   return path.join(/* turbopackIgnore: true */ transferFolder(folderName), storedName);
 }
 
-export async function writeTransferManifest(manifest: TransferManifest) {
+async function writeTransferManifest(manifest: TransferManifest) {
   const finalManifestPath = manifestPath(manifest.folderName);
   const temporaryManifestPath = `${finalManifestPath}.${crypto.randomUUID()}.tmp`;
   try {
@@ -507,12 +509,16 @@ export async function incrementTransferStat(id: string, statName: "views" | "dow
       if (manifest.id !== id || transferIsExpired(manifest)) return false;
       manifest[statName] = Math.max(0, Number(manifest[statName]) || 0) + 1;
       const temporaryManifestPath = `${finalManifestPath}.${crypto.randomUUID()}.tmp`;
-      await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), {
-        encoding: "utf8",
-        flag: "wx",
-        mode: 0o600,
-      });
-      await rename(temporaryManifestPath, finalManifestPath);
+      try {
+        await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), {
+          encoding: "utf8",
+          flag: "wx",
+          mode: 0o600,
+        });
+        await rename(temporaryManifestPath, finalManifestPath);
+      } finally {
+        await rm(temporaryManifestPath, { force: true }).catch(() => undefined);
+      }
       return true;
     } catch {
       return false;
@@ -630,10 +636,8 @@ export async function countIncompleteUploadSessions(ownerKey?: string) {
   return count;
 }
 
-export async function getStoredFile(transferId: string, fileId: string) {
+export async function getStoredFile(manifest: TransferManifest, fileId: string) {
   if (!FILE_ID_PATTERN.test(fileId)) return null;
-  const manifest = await getTransfer(transferId);
-  if (!manifest) return null;
   const file = manifest.files.find((item) => item.id === fileId);
   if (!file) return null;
   const filePath = storedFilePath(manifest.folderName, file.storedName);

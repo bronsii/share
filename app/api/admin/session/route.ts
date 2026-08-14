@@ -11,6 +11,7 @@ import {
   consumeRateLimit,
   globalRateLimitKey,
   ProxyConfigurationError,
+  proxyConfigurationUnavailable,
   readJsonBody,
   requestHasSameOrigin,
   RequestBodyTooLargeError,
@@ -28,13 +29,6 @@ function tooManyAttempts(retryAfter: number) {
   return NextResponse.json(
     { error: "Zu viele Versuche. Bitte warte und versuche es später erneut." },
     { status: 429, headers: { "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
-  );
-}
-
-function proxyUnavailable() {
-  return NextResponse.json(
-    { error: "Der Reverse Proxy ist nicht korrekt mit Share verbunden." },
-    { status: 503, headers: { "Cache-Control": "no-store" } },
   );
 }
 
@@ -80,7 +74,7 @@ export async function POST(request: Request) {
     });
     return response;
   } catch (error) {
-    if (error instanceof ProxyConfigurationError) return proxyUnavailable();
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
     if (error instanceof RequestBodyTooLargeError) {
       return NextResponse.json({ error: "Die Anfrage ist zu groß." }, { status: 413, headers: { "Cache-Control": "no-store" } });
     }
@@ -101,7 +95,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Anfrage nicht erlaubt." }, { status: 403, headers: { "Cache-Control": "no-store" } });
     }
   } catch (error) {
-    if (error instanceof ProxyConfigurationError) return proxyUnavailable();
+    if (error instanceof ProxyConfigurationError) return proxyConfigurationUnavailable();
     throw error;
   }
   const response = NextResponse.json({ authenticated: false }, { headers: { "Cache-Control": "no-store" } });

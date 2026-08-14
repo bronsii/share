@@ -3,6 +3,7 @@ import { rm, stat } from "node:fs/promises";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { NextResponse } from "next/server";
+import { GCM_TAG_SIZE } from "@/lib/e2e-crypto";
 import {
   appendUploadChunk,
   consumeStorageReservation,
@@ -82,10 +83,10 @@ export async function PUT(request: Request, context: Context) {
       return NextResponse.json({ error: "Ung\u00fcltiger Dateiabschnitt." }, { status: 400 });
     }
     if (target.session.encryption && target.file.plaintextSize) {
-      const cipherChunkSize = target.session.encryption.chunkSize + 16;
+      const cipherChunkSize = target.session.encryption.chunkSize + GCM_TAG_SIZE;
       const chunkIndex = Math.floor(offset / cipherChunkSize);
       const plaintextOffset = chunkIndex * target.session.encryption.chunkSize;
-      const expectedLength = Math.min(target.session.encryption.chunkSize, target.file.plaintextSize - plaintextOffset) + 16;
+      const expectedLength = Math.min(target.session.encryption.chunkSize, target.file.plaintextSize - plaintextOffset) + GCM_TAG_SIZE;
       if (offset !== chunkIndex * cipherChunkSize || length !== expectedLength) {
         return NextResponse.json({ error: "Ung\u00fcltiger verschl\u00fcsselter Dateiabschnitt." }, { status: 400 });
       }

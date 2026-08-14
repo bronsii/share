@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminRequestIsAuthenticated } from "@/lib/admin-auth";
-import { ProxyConfigurationError, requestHasSameOrigin } from "@/lib/request-security";
+import { ProxyConfigurationError, proxyConfigurationUnavailable, requestHasSameOrigin } from "@/lib/request-security";
 import { removeTransferFolder } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,7 @@ export async function DELETE(request: Request, context: Context) {
     }
   } catch (error) {
     if (error instanceof ProxyConfigurationError) {
-      return NextResponse.json(
-        { error: "Der Reverse Proxy ist nicht korrekt mit Share verbunden." },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      );
+      return proxyConfigurationUnavailable();
     }
     throw error;
   }

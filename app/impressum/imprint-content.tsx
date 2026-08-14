@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, FileText, Mail, MapPin } from "lucide-react";
 import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
+import { LanguageSwitch } from "../language-switch";
 
 const imprintCopy = {
   de: {
@@ -34,10 +35,7 @@ export function ImprintContent({ initialLanguage }: { initialLanguage: UiLanguag
     <main className="privacy-page">
       <header className="privacy-header">
         <Link className="privacy-back" href="/"><ArrowLeft size={16} aria-hidden="true" />{copy.back}</Link>
-        <div className="language-switch" role="group" aria-label={copy.languageLabel}>
-          <button type="button" className={language === "de" ? "is-active" : ""} aria-pressed={language === "de"} onClick={() => changeLanguage("de")}>DE</button>
-          <button type="button" className={language === "en" ? "is-active" : ""} aria-pressed={language === "en"} onClick={() => changeLanguage("en")}>EN</button>
-        </div>
+        <LanguageSwitch language={language} label={copy.languageLabel} onChange={changeLanguage} />
       </header>
 
       <section className="privacy-shell">

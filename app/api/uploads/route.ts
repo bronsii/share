@@ -19,6 +19,7 @@ import {
   clientRateLimitKey,
   consumeRateLimit,
   ProxyConfigurationError,
+  proxyConfigurationUnavailable,
   readJsonBody,
   RequestBodyTooLargeError,
 } from "@/lib/request-security";
@@ -171,10 +172,7 @@ export async function POST(request: Request) {
     if (folderPrepared) await removeTransferFolder(folderName).catch(() => undefined);
     await releaseStorageReservation(storageReservationId).catch(() => undefined);
     if (error instanceof ProxyConfigurationError) {
-      return NextResponse.json(
-        { error: "Der Reverse Proxy ist nicht korrekt mit Share verbunden." },
-        { status: 503, headers: { "Cache-Control": "no-store" } },
-      );
+      return proxyConfigurationUnavailable();
     }
     if (error instanceof UploadLimitError) {
       return NextResponse.json({ error: error.message }, { status: 429, headers: { "Retry-After": String(error.retryAfter), "Cache-Control": "no-store" } });

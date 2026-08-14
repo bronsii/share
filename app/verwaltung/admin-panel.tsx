@@ -219,5 +219,5 @@ export function AdminPanel() {
 }
 
 export function AdminBackLink() {
-  return <Link className="admin-back" href="/"><ArrowLeft size={16} /> Zurück zu Share</Link>;
+  return <Link className="admin-back" href="/"><ArrowLeft size={16} /> Zurück zu Sendebude</Link>;
 }

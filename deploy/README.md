@@ -1,41 +1,72 @@
-# Service-Härtung
+# Produktivbetrieb mit systemd
 
-Die geprüften Unit-Dateien werden mit Root-Rechten installiert:
+Die Units erwarten die Anwendung unter `/srv/apps/share`, das Laufzeitverzeichnis unter `/srv/apps/share/shared` und Node unter `/opt/node/bin/node`. Falls Node an einem anderen Ort liegt, müssen `ExecStart` der App-Unit und der Cleanup-Unit vor der Installation angepasst werden.
+
+## Anwendung bauen
 
 ```bash
-proxy_secret="$(openssl rand -hex 32)"
-printf 'SHARE_PROXY_SECRET=%s\n' "$proxy_secret" | sudo tee /etc/share-proxy.env >/dev/null
-sudo chmod 0600 /etc/share-proxy.env
-
-sudo install -o root -g root -m 0644 deploy/share.service /etc/systemd/system/share.service
-sudo install -o root -g root -m 0644 deploy/share-cleanup.service /etc/systemd/system/share-cleanup.service
-sudo systemctl daemon-reload
-sudo systemctl restart share.service
-sudo systemctl restart share-cleanup.timer
+cd /srv/apps/share
+npm ci
+npm run check
 ```
 
-Dasselbe Geheimnis wird Caddy beim Start als Umgebungsvariable zur Verfügung gestellt. Bei einer systemd-Installation geschieht das über ein Drop-in:
+`npm run check` führt Lint, TypeScript, Tests und zuletzt den Produktions-Build aus.
+
+## Geheimnisse einmalig anlegen
+
+Die folgenden Befehle erzeugen eine starke Admin-Passphrase sowie getrennte Geheimnisse für Admin-Sitzungen und den Reverse Proxy. Den ausgegebenen Admin-Code nur an einem sicheren Ort aufbewahren. Dieser Abschnitt ist nicht für normale Updates gedacht.
 
 ```bash
+admin_code="$(openssl rand -base64 24 | tr -d '\n')"
+admin_session_secret="$(openssl rand -hex 32)"
+proxy_secret="$(openssl rand -hex 32)"
+
+sudo install -o root -g root -m 0600 /dev/null /etc/share-admin.env
+sudo install -o root -g root -m 0600 /dev/null /etc/share-proxy.env
+printf 'SHARE_ADMIN_CODE=%s\nSHARE_ADMIN_SESSION_SECRET=%s\n' "$admin_code" "$admin_session_secret" | sudo tee /etc/share-admin.env >/dev/null
+printf 'SHARE_PROXY_SECRET=%s\n' "$proxy_secret" | sudo tee /etc/share-proxy.env >/dev/null
+printf 'Admin-Code: %s\n' "$admin_code"
+unset admin_code admin_session_secret proxy_secret
+```
+
+## Anwendung und Cleanup installieren oder aktualisieren
+
+```bash
+sudo install -o root -g root -m 0644 deploy/share.service /etc/systemd/system/share.service
+sudo install -o root -g root -m 0644 deploy/share-cleanup.service /etc/systemd/system/share-cleanup.service
+sudo install -o root -g root -m 0644 deploy/share-cleanup.timer /etc/systemd/system/share-cleanup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable share.service share-cleanup.timer
+sudo systemctl restart share.service share-cleanup.timer
+```
+
+Der explizite Neustart ist auch bei Updates nötig, damit der laufende Prozess den neuen Build, neue Units und geänderte Geheimnisse übernimmt. Der Prozess erhält ausschließlich Schreibrechte auf `shared/`; dort gespeicherte Dateien dürfen nicht ausgeführt werden. Der Timer startet die gemeinsame, getestete Löschroutine alle 15 Minuten.
+
+## Caddy anbinden
+
+Das Caddy-Snippet wird separat installiert und einmalig über einen Top-Level-Import in die bestehende Caddyfile eingebunden. Dadurch werden andere Virtual Hosts nicht überschrieben.
+
+```bash
+sudo install -d -o root -g root -m 0755 /etc/caddy/sites
+sudo install -o root -g root -m 0644 deploy/Caddyfile-share.txt /etc/caddy/sites/sendebude.caddy
+if ! sudo grep -qxF 'import /etc/caddy/sites/*.caddy' /etc/caddy/Caddyfile; then
+  printf '\nimport /etc/caddy/sites/*.caddy\n' | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+fi
+
 sudo install -d -o root -g root -m 0755 /etc/systemd/system/caddy.service.d
 printf '[Service]\nEnvironmentFile=/etc/share-proxy.env\n' | sudo tee /etc/systemd/system/caddy.service.d/share-proxy.conf >/dev/null
 sudo systemctl daemon-reload
-```
-
-`/etc/share-proxy.env` muss ausschließlich für Root lesbar bleiben. Nach einer Rotation werden sowohl `share.service` als auch `caddy.service` neu gestartet. Bei einem fehlenden oder zu kurzen `SHARE_PROXY_SECRET` verweigert `share.service` den Start. Stimmen die Geheimnisse zwischen Caddy und Share nicht überein, schlagen API-Anfragen geschlossen fehl und der Fehler wird im Share-Journal protokolliert.
-
-Danach prüfen:
-
-```bash
-systemctl is-active share.service share-cleanup.timer
-systemd-analyze security share.service --no-pager
-```
-
-Der Laufzeitprozess erhält ausschließlich Schreibrechte auf `shared/`; dort gespeicherte Dateien dürfen nicht ausgeführt werden.
-
-Der Block in `Caddyfile-share.txt` stellt `sendebude.de` bereit und leitet `www.sendebude.de` auf die Hauptdomain um. Er begrenzt jeden Anfragekörper bereits am Reverse Proxy auf 8 MB; die verschlüsselten Uploadblöcke sind ungefähr 4 MB groß. Caddy überschreibt außerdem `X-Share-Client-IP` und versieht die Weiterleitung mit `X-Share-Proxy-Secret`. Die Anwendung vertraut der Client-IP nur bei passendem Geheimnis. Anschließend:
-
-```bash
 sudo caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy.service
+sudo systemctl restart caddy.service
+```
+
+Der Block stellt `sendebude.de` bereit, leitet `www.sendebude.de` um und begrenzt Anfragekörper auf 8 MB. Caddy überschreibt die Client-IP- und Proxy-Secret-Header; die Anwendung vertraut ihnen nur bei übereinstimmendem Geheimnis. Nach einer Rotation von `/etc/share-proxy.env` müssen `share.service` und `caddy.service` neu gestartet werden.
+
+## Prüfung
+
+```bash
+systemctl is-active share.service share-cleanup.timer caddy.service
+systemctl list-timers share-cleanup.timer --no-pager
+systemd-analyze security share.service --no-pager
+journalctl -u share.service -n 30 --no-pager
 ```

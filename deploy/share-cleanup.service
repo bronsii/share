@@ -1,5 +1,5 @@
 [Unit]
-Description=Delete expired Bronsinger Share transfers
+Description=Delete expired Sendebude transfers
 
 [Service]
 Type=oneshot

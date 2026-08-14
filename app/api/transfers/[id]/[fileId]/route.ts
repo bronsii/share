@@ -51,7 +51,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   }
   const file = manifest.files.find((item) => item.id === fileId);
   if (!file) return new Response("Datei nicht gefunden.", { status: 404 });
-  const object = await getStoredFile(id, fileId);
+  const object = await getStoredFile(manifest, fileId);
   if (!object) return new Response("Datei nicht gefunden.", { status: 404 });
   const [requestLimit, byteLimit] = await Promise.all([
     consumeRateLimit({

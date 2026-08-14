@@ -53,7 +53,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   const sources: ZipSource[] = [];
   for (const file of manifest.files) {
-    const object = await getStoredFile(id, file.id);
+    const object = await getStoredFile(manifest, file.id);
     if (!object) return new Response("Eine Datei wurde nicht gefunden.", { status: 404 });
     sources.push({
       name: file.storedName,
@@ -111,7 +111,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     return new Response(body, {
       headers: {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="Share-${manifest.folderName}.zip"`,
+        "Content-Disposition": `attachment; filename="Sendebude-${manifest.folderName}.zip"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

@@ -4,8 +4,6 @@ import {
   Check,
   ChevronDown,
   Clipboard,
-  FileArchive,
-  FileImage,
   FileText,
   Pause,
   Play,
@@ -30,14 +28,16 @@ import {
   PLAINTEXT_CHUNK_SIZE,
   plaintextProgressFromCiphertext,
 } from "@/lib/e2e-crypto";
+import { formatBytes } from "@/lib/format-bytes";
 import type { UiLanguage } from "@/lib/ui-language";
 import { orderRecoveryFiles, validUploadRecovery } from "@/lib/upload-recovery.mjs";
+import { FileGlyph } from "./file-glyph";
 
 const MAX_FILES = 20;
 const MAX_TOTAL_SIZE = 5 * 1024 ** 3;
 const UPLOAD_RECOVERY_STORAGE_KEY = "share-upload-recovery-v1";
 
-export type Language = UiLanguage;
+type Language = UiLanguage;
 
 const translations = {
   de: {
@@ -46,7 +46,6 @@ const translations = {
     emptyOrFolder: "Ordner oder leere Dateien können nicht hochgeladen werden. Bitte wähle einzelne Dateien oder packe den Ordner als ZIP-Datei.",
     uploadFailed: "Die Übertragung konnte nicht erstellt werden.",
     connectionLost: "Die Verbindung wurde beim Hochladen unterbrochen.",
-    uploadAborted: "Der Upload wurde abgebrochen.",
     copyManually: "Bitte markiere den Link und kopiere ihn manuell.",
     shareTitle: "Freigabelink",
     ready: "Bereit zum Teilen",
@@ -101,7 +100,6 @@ const translations = {
     emptyOrFolder: "Folders or empty files cannot be uploaded. Please choose individual files or create a ZIP archive first.",
     uploadFailed: "The transfer could not be created.",
     connectionLost: "The connection was interrupted during upload.",
-    uploadAborted: "The upload was cancelled.",
     copyManually: "Please select the link and copy it manually.",
     shareTitle: "Share link",
     ready: "Ready to share",
@@ -215,13 +213,6 @@ function clearUploadRecovery() {
   }
 }
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes < 10 * 1024 ** 3 ? 1 : 0)} GB`;
-  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
-}
-
 function formatDuration(seconds: number, language: Language) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—";
   const rounded = Math.ceil(seconds);
@@ -239,14 +230,6 @@ function fileKey(file: File) {
 
 function monotonicTimestamp() {
   return performance.now();
-}
-
-function FileGlyph({ file }: { file: File }) {
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  const isArchive = ["zip", "rar", "7z", "tar", "gz"].includes(extension ?? "");
-  if (file.type.startsWith("image/")) return <FileImage size={19} />;
-  if (isArchive) return <FileArchive size={19} />;
-  return <FileText size={19} />;
 }
 
 export function TransferPanel({ language }: { language: Language }) {
@@ -923,7 +906,7 @@ export function TransferPanel({ language }: { language: Language }) {
             const isCurrentUpload = uploading && index === currentFileIndex;
             return (
               <div className="file-row" key={fileKey(file)}>
-                <span className="file-glyph" aria-hidden="true"><FileGlyph file={file} /></span>
+                <span className="file-glyph" aria-hidden="true"><FileGlyph name={file.name} type={file.type} size={19} /></span>
                 <span className="file-name" title={file.name}>{file.name}</span>
                 <span className="file-progress" aria-label={uploading ? `${fileProgress}% ${text.uploaded}` : undefined}>{uploading ? `${fileProgress}%` : ""}</span>
                 <span className="file-speed" aria-label={isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)} ${text.perSecond}` : undefined}>
@@ -934,7 +917,7 @@ export function TransferPanel({ language }: { language: Language }) {
                 </span>
                 <span className="file-actions">
                   {isCurrentUpload && (
-                    <button className="pause-button" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
+                    <button type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
                       {paused ? <Play size={16} /> : <Pause size={16} />}
                     </button>
                   )}

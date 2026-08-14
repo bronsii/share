@@ -1,8 +1,8 @@
-export const E2E_VERSION = 1 as const;
+const E2E_VERSION = 1 as const;
 export const PLAINTEXT_CHUNK_SIZE = 4 * 1024 ** 2;
 export const GCM_TAG_SIZE = 16;
 
-export type EncryptedFileMetadata = {
+type EncryptedFileMetadata = {
   name: string;
   type: string;
   size: number;
