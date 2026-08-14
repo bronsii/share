@@ -258,7 +258,7 @@ a { color: inherit; text-decoration: none; }
 .hero-copy h1 span { display: block; color: #f0a13a; }
 .hero-copy h1.is-inline { white-space: nowrap; }
 .hero-copy h1.is-inline span { display: inline; margin-left: 0.22em; }
-.compact-copy h1.secure-heading { margin-inline: auto; }
+.compact-copy h1.secure-heading { margin-inline: 0; text-align: left; }
 .hero-lead {
   width: max-content;
   max-width: 540px;
