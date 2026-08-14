@@ -1,0 +1,67 @@
+name: Verbesserung vorschlagen
+description: Eine Funktion oder technische Verbesserung mit sicheren Beispielen vorschlagen
+title: "[Vorschlag]: "
+labels: []
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deinen Vorschlag. Verwende nur erfundene Beispiele und veröffentliche niemals einen vollständigen Freigabelink, echte Dateien, personenbezogene Daten oder Zugangsdaten.
+
+        Sicherheitslücken gehören nicht in ein öffentliches Issue. Verwende dafür die [Sicherheitsrichtlinie](https://github.com/bronsii/share/security/policy).
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Schutz vertraulicher Daten
+      options:
+        - label: Ich habe Freigabelinks, Schlüssel, echte Dateien, personenbezogene Daten und Zugangsdaten aus diesem Vorschlag entfernt.
+          required: true
+        - label: Dieser Vorschlag beschreibt keine Sicherheitslücke.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Betroffener Bereich
+      options:
+        - Startseite oder Darstellung
+        - Upload oder Wiederaufnahme
+        - Freigabelink oder Download
+        - Datenschutz oder Barrierefreiheit
+        - Installation oder Betrieb
+        - Dokumentation
+        - Anderer Bereich
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Ausgangslage
+      description: Welches Problem oder welcher Bedarf besteht heute?
+      placeholder: Beschreibe die Ausgangslage ohne vertrauliche oder echte Nutzerdaten.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Gewünschte Verbesserung
+      description: Wie sollte Sendebude stattdessen funktionieren?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen und Auswirkungen
+      description: Optional. Welche Alternativen, Risiken oder Kompatibilitätsfolgen sollten bedacht werden?
+
+  - type: input
+    id: version
+    attributes:
+      label: Version oder Commit
+      description: Bei einer eigenen Installation möglichst den Commit-Hash angeben.
+      placeholder: z. B. aktuelles main oder sendebude.de
