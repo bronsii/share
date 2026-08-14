@@ -56,11 +56,11 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
       {text.features.map((feature) => (
         <li key={feature.label}>
           <i className="feature-dot" aria-hidden="true" />
-          <span>
-            {"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}
+          <span className={"flag" in feature && feature.flag ? "feature-with-flag" : undefined}>
             {"href" in feature && feature.href ? (
               <a href={feature.href} target="_blank" rel="noreferrer">{feature.label}</a>
             ) : feature.label}
+            {"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}
           </span>
         </li>
       ))}
