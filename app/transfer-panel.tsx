@@ -91,7 +91,6 @@ const translations = {
     recoveryMismatch: "Die ausgewählten Dateien stimmen nicht mit dem unterbrochenen Upload überein.",
     recoveryUnavailable: "Der unterbrochene Upload ist nicht mehr verfügbar. Bitte starte eine neue Übertragung.",
     privacyTitle: "Datenschutz",
-    privacy: "Unsere Intention ist ein einfacher und datensparsamer Dateiversand. Deine Dateien werden bereits im Browser Ende-zu-Ende verschlüsselt, auf unserem Server in Deutschland nur verschlüsselt gespeichert und nach Ablauf automatisch gelöscht. Der Schlüssel bleibt im Freigabelink.",
     locale: "de-DE",
   },
   en: {
@@ -145,7 +144,6 @@ const translations = {
     recoveryMismatch: "The selected files do not match the interrupted upload.",
     recoveryUnavailable: "The interrupted upload is no longer available. Please start a new transfer.",
     privacyTitle: "Privacy",
-    privacy: "Our intention is simple, privacy-friendly file sharing. Your files are end-to-end encrypted in your browser, stored only in encrypted form on our server in Germany, and automatically deleted after expiry. The key remains in the share link.",
     locale: "en-GB",
   },
 } as const;
@@ -852,7 +850,7 @@ export function TransferPanel({ language }: { language: Language }) {
           {copied ? <Check size={18} /> : <Send size={18} />}
           {copied ? text.linkCopied : text.shareAction}
         </button>
-        <div className="privacy-note"><ShieldCheck size={15} aria-hidden="true" /><span><strong>{text.privacyTitle}</strong><span>{text.privacy}</span></span></div>
+        <a className="privacy-note privacy-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
         <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
       </section>
     );
@@ -981,7 +979,7 @@ export function TransferPanel({ language }: { language: Language }) {
         {text.shareLink}
       </button>
 
-      <div className="privacy-note"><ShieldCheck size={15} aria-hidden="true" /><span><strong>{text.privacyTitle}</strong><span>{text.privacy}</span></span></div>
+      <a className="privacy-note privacy-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
     </section>
   );
 }
