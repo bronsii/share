@@ -21,6 +21,8 @@ import {
   ProxyConfigurationError,
   proxyConfigurationUnavailable,
   readJsonBody,
+  requestHasJsonContentType,
+  requestHasSameOrigin,
   RequestBodyTooLargeError,
 } from "@/lib/request-security";
 
@@ -74,6 +76,18 @@ export async function POST(request: Request) {
   let folderPrepared = false;
   let storageReservationId: string | undefined;
   try {
+    if (!requestHasSameOrigin(request)) {
+      return NextResponse.json(
+        { error: "Anfrage nicht erlaubt." },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (!requestHasJsonContentType(request)) {
+      return NextResponse.json(
+        { error: "Die Upload-Anfrage muss JSON enthalten." },
+        { status: 415, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const ownerKey = await clientRateLimitKey(request);
     const sessionAttempts = await consumeRateLimit({
       scope: "upload-sessions-hour",
