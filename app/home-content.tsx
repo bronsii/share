@@ -19,7 +19,7 @@ const heroCopy = {
       { label: "Ende-zu-Ende verschlüsselt" },
       { label: "Ohne Registrierung" },
       { label: "Keine Werbe- oder Analyse-Tracker" },
-      { label: "Open Source" },
+      { label: "Open Source", href: "https://github.com/bronsii/share" },
       { label: "Hosted in Germany", flag: true },
     ],
     languageLabel: "Sprache wählen",
@@ -38,7 +38,7 @@ const heroCopy = {
       { label: "End-to-end encrypted" },
       { label: "No registration" },
       { label: "No advertising or analytics trackers" },
-      { label: "Open source" },
+      { label: "Open source", href: "https://github.com/bronsii/share" },
       { label: "Hosted in Germany", flag: true },
     ],
     languageLabel: "Choose language",
@@ -56,7 +56,12 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
       {text.features.map((feature) => (
         <li key={feature.label}>
           <i className="feature-dot" aria-hidden="true" />
-          <span>{"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}{feature.label}</span>
+          <span>
+            {"flag" in feature && feature.flag ? <i className="inline-germany-flag" role="img" aria-label={text.flagLabel} /> : null}
+            {"href" in feature && feature.href ? (
+              <a href={feature.href} target="_blank" rel="noreferrer">{feature.label}</a>
+            ) : feature.label}
+          </span>
         </li>
       ))}
     </ul>
