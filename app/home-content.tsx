@@ -9,9 +9,10 @@ import { TransferPanel } from "./transfer-panel";
 
 const heroCopy = {
   de: {
-    firstLine: "daten.",
+    firstLine: "dateien.",
     secondLine: "sicher.",
     thirdLine: "teilen.",
+    lead: "Dateien hochladen und per Link weitergeben.",
     features: [
       { label: "Kostenlos" },
       { label: "Automatische Löschung" },
@@ -28,9 +29,10 @@ const heroCopy = {
     adminLabel: "Private Verwaltung öffnen",
   },
   en: {
-    firstLine: "data.",
+    firstLine: "files.",
     secondLine: "secure.",
     thirdLine: "share.",
+    lead: "Upload files and share them by link.",
     features: [
       { label: "Free" },
       { label: "Automatic deletion" },
@@ -80,11 +82,12 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
 
         <div className="hero-grid compact-grid">
           <div className="hero-copy compact-copy">
-            <h1 className="secure-heading">
+            <h1 className={`secure-heading secure-heading-${language}`}>
               {text.firstLine}{" "}
               <span>{text.secondLine}</span>{" "}
               <span className="hero-third-line">{text.thirdLine}</span>
             </h1>
+            <p className="hero-lead">{text.lead}</p>
             {renderFeatures("primary")}
           </div>
           <TransferPanel language={language} />
