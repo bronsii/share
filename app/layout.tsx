@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   applicationName: "Sendebude",
   icons: { icon: "/favicon.svg?v=3", shortcut: "/favicon.svg?v=3" },
+  verification: { google: "kKxsG0tD3_gn0ibh0Z6r5D3b2-W5SIzcEw7ymq6SaBw" },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -7,6 +7,7 @@ import { startNextTestServer } from "./next-test-server.mjs";
 
 const SITE_URL = "https://sendebude.de";
 const OG_IMAGE_URL = `${SITE_URL}/og.png`;
+const GOOGLE_SITE_VERIFICATION = "kKxsG0tD3_gn0ibh0Z6r5D3b2-W5SIzcEw7ymq6SaBw";
 const BOT_HEADERS = {
   "Accept-Language": "de",
   "User-Agent": "facebookexternalhit/1.1",
@@ -75,6 +76,7 @@ test("SEO-Ausgaben verwenden feste Produktions-URLs und schützen nicht öffentl
     assert.equal(singleAttribute(head, "meta", { property: "og:url" }, "content"), expectedUrl);
     assert.equal(singleAttribute(head, "meta", { property: "og:image" }, "content"), OG_IMAGE_URL);
     assert.equal(singleAttribute(head, "meta", { name: "twitter:image" }, "content"), OG_IMAGE_URL);
+    assert.equal(singleAttribute(head, "meta", { name: "google-site-verification" }, "content"), GOOGLE_SITE_VERIFICATION);
 
     const robotsTags = tagsWithAttributes(head, "meta", { name: "robots" });
     for (const robotsTag of robotsTags) {
@@ -94,6 +96,7 @@ test("SEO-Ausgaben verwenden feste Produktions-URLs und schützen nicht öffentl
     assert.equal(directiveIncludes(robots, "noindex"), true, `${route} braucht ein noindex-Meta-Tag`);
     assert.equal(singleAttribute(head, "meta", { property: "og:image" }, "content"), OG_IMAGE_URL);
     assert.equal(singleAttribute(head, "meta", { name: "twitter:image" }, "content"), OG_IMAGE_URL);
+    assert.equal(singleAttribute(head, "meta", { name: "google-site-verification" }, "content"), GOOGLE_SITE_VERIFICATION);
     assert.equal(tagsWithAttributes(head, "link", { rel: "canonical" }).length, 0, `${route} darf kein Canonical erhalten`);
   }
 
