@@ -214,6 +214,15 @@ a { color: inherit; text-decoration: none; }
 .hero-copy h1 span { display: block; color: #f0a13a; }
 .hero-copy h1 span.hero-third-line { color: inherit; }
 .compact-copy h1.secure-heading { margin-inline: 0; text-align: left; }
+.hero-lead {
+  max-width: 500px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
+}
+.hero-lead + .hero-features { margin-top: 26px; }
 .hero-features {
   width: 100%;
   margin: 34px 0 0;
@@ -608,7 +617,9 @@ a { color: inherit; text-decoration: none; }
   .hero-copy, .compact-copy { width: 100%; min-width: 0; padding-bottom: 0; }
   .hero-copy h1 { font-size: clamp(43px, 13vw, 58px); }
   .compact-copy h1.secure-heading { width: max-content; max-width: 100%; font-size: min(7.3vw, 28px); line-height: 1; white-space: nowrap; }
+  .compact-copy h1.secure-heading-de { font-size: min(6.8vw, 28px); }
   .compact-copy h1.secure-heading span { display: inline; }
+  .hero-lead { margin-top: 10px; font-size: 12px; }
   .hero-features-primary { display: none; }
   .hero-features-mobile { display: grid; margin-top: 0; }
   .hero-features { gap: 13px 16px; }
