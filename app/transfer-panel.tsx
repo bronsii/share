@@ -910,9 +910,7 @@ export function TransferPanel({ language }: { language: Language }) {
       {files.length > 0 && (
         <div className="selection-counter" aria-live="polite">
           <span>{files.length} {files.length === 1 ? text.file : text.files}</span>
-          <span>
-            {uploading ? <><strong>{formatBytes(uploadedBytes)}</strong> / {formatBytes(totalSize)} {text.uploaded}</> : <><strong>{formatBytes(totalSize)}</strong> {text.ofMaximum}</>}
-          </span>
+          {!uploading && <span><strong>{formatBytes(totalSize)}</strong> {text.ofMaximum}</span>}
         </div>
       )}
 
@@ -934,11 +932,6 @@ export function TransferPanel({ language }: { language: Language }) {
                   {uploading ? <><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</> : formatBytes(file.size)}
                 </span>
                 <span className="file-actions">
-                  {isCurrentUpload && (
-                    <button type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload}>
-                      {paused ? <Play size={16} /> : <Pause size={16} />}
-                    </button>
-                  )}
                   <button type="button" disabled={Boolean(removingFileKey) || cancellingUpload || (uploading && totalProgress >= 100)} onClick={() => void removeFile(index)} aria-label={uploading ? text.removeUploadingFile(file.name) : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
                 </span>
               </div>
@@ -955,6 +948,9 @@ export function TransferPanel({ language }: { language: Language }) {
           </div>
           <div className="upload-progress-row">
             <progress max="100" value={totalProgress} aria-label={`${totalProgress} % ${text.uploaded}`} />
+            <button className="upload-pause-toggle" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload} title={paused ? text.resumeUpload : text.pauseUpload}>
+              {paused ? <Play size={16} /> : <Pause size={16} />}
+            </button>
             <button className="upload-cancel-all" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={() => void cancelUpload()} aria-label={text.cancelUpload} title={text.cancelUpload}>
               <Trash2 size={16} />
             </button>
