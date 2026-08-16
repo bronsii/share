@@ -89,7 +89,7 @@ const termsCopy = {
         body: "Wesentliche Änderungen dieser Bedingungen werden auf der Website deutlich bekannt gemacht und gelten für zukünftige Uploads erst nach erneuter Bestätigung. Es gilt deutsches Recht. Zwingende Verbraucherschutzvorschriften des Staates, in dem ein Verbraucher seinen gewöhnlichen Aufenthalt hat, bleiben unberührt. Für Gerichtsstände gelten die gesetzlichen Vorschriften.",
       },
     },
-    privacyLink: "Datenschutz",
+    privacyLink: "Datenschutzhinweise",
     imprintLink: "Impressum",
   },
   en: {
@@ -173,7 +173,7 @@ const termsCopy = {
         body: "Material changes to these terms will be clearly announced on the website and will apply to future uploads only after renewed acceptance. German law applies. Mandatory consumer-protection rules of the country in which a consumer habitually resides remain unaffected. Statutory rules determine the competent courts.",
       },
     },
-    privacyLink: "Privacy",
+    privacyLink: "Privacy Notice",
     imprintLink: "Legal notice",
   },
 } as const;
