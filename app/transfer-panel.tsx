@@ -57,6 +57,7 @@ const translations = {
     copyLink: "Freigabelink kopieren",
     file: "Datei",
     files: "Dateien",
+    uploadedFileCount: (completed: number, total: number) => `Dateien ${completed}/${total}`,
     until: "bis",
     linkCopied: "Link kopiert",
     shareLink: "Hochladen & Link erstellen",
@@ -116,6 +117,7 @@ const translations = {
     copyLink: "Copy share link",
     file: "file",
     files: "files",
+    uploadedFileCount: (completed: number, total: number) => `Files ${completed}/${total}`,
     until: "until",
     linkCopied: "Link copied",
     shareLink: "Upload & create link",
@@ -244,6 +246,17 @@ function monotonicTimestamp() {
   return performance.now();
 }
 
+function completedUploadFileCount(files: File[], uploadedBytes: number) {
+  let completed = 0;
+  let cumulativeSize = 0;
+  for (const file of files) {
+    cumulativeSize += file.size;
+    if (uploadedBytes < cumulativeSize) break;
+    completed += 1;
+  }
+  return completed;
+}
+
 export function TransferPanel({ language }: { language: Language }) {
   const text = translations[language];
   const inputRef = useRef<HTMLInputElement>(null);
@@ -285,6 +298,7 @@ export function TransferPanel({ language }: { language: Language }) {
 
   const termsAccepted = acceptedTermsLanguage === language;
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const completedFiles = completedUploadFileCount(files, uploadedBytes);
   const remainingBytes = Math.max(0, totalSize - uploadedBytes);
   const totalProgress = totalSize ? Math.min(100, Math.round((uploadedBytes / totalSize) * 100)) : 0;
   const remainingSeconds = uploadSpeed > 0 ? remainingBytes / uploadSpeed : 0;
@@ -909,7 +923,7 @@ export function TransferPanel({ language }: { language: Language }) {
 
       {files.length > 0 && (
         <div className="selection-counter" aria-live="polite">
-          <span>{files.length} {files.length === 1 ? text.file : text.files}</span>
+          <span>{uploading ? text.uploadedFileCount(completedFiles, files.length) : `${files.length} ${files.length === 1 ? text.file : text.files}`}</span>
           {!uploading && <span><strong>{formatBytes(totalSize)}</strong> {text.ofMaximum}</span>}
         </div>
       )}
