@@ -26,6 +26,7 @@ export type TransferManifest = {
   message: string;
   files: TransferFile[];
   encryption?: { version: 1; metadata: string; chunkSize: number };
+  termsAcceptance?: { version: string; language: "de" | "en"; acceptedAt: string };
   views?: number;
   downloads?: number;
 };

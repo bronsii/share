@@ -10,6 +10,7 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  ScrollText,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   plaintextProgressFromCiphertext,
 } from "@/lib/e2e-crypto";
 import { formatBytes } from "@/lib/format-bytes";
+import { TERMS_VERSION } from "@/lib/terms";
 import type { UiLanguage } from "@/lib/ui-language";
 import { orderRecoveryFiles, validUploadRecovery } from "@/lib/upload-recovery.mjs";
 import { FileGlyph } from "./file-glyph";
@@ -92,6 +94,11 @@ const translations = {
     recoveryUnavailable: "Der unterbrochene Upload ist nicht mehr verfügbar. Bitte starte eine neue Übertragung.",
     privacyTitle: "Datenschutz",
     imprintTitle: "Impressum",
+    termsTitle: "Nutzungsbedingungen",
+    termsAcceptanceStart: "Ich akzeptiere die",
+    termsAcceptanceMiddle: "und habe die",
+    privacyAcknowledgementTitle: "Datenschutzhinweise",
+    termsAcceptanceEnd: "zur Kenntnis genommen.",
     locale: "de-DE",
   },
   en: {
@@ -146,6 +153,11 @@ const translations = {
     recoveryUnavailable: "The interrupted upload is no longer available. Please start a new transfer.",
     privacyTitle: "Privacy",
     imprintTitle: "Legal notice",
+    termsTitle: "Terms of Use",
+    termsAcceptanceStart: "I accept the",
+    termsAcceptanceMiddle: "and acknowledge the",
+    privacyAcknowledgementTitle: "Privacy Notice",
+    termsAcceptanceEnd: ".",
     locale: "en-GB",
   },
 } as const;
@@ -246,6 +258,7 @@ export function TransferPanel({ language }: { language: Language }) {
   const [files, setFiles] = useState<File[]>([]);
   const [days, setDays] = useState("3");
   const [message, setMessage] = useState("");
+  const [acceptedTermsLanguage, setAcceptedTermsLanguage] = useState<Language | null>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -270,6 +283,7 @@ export function TransferPanel({ language }: { language: Language }) {
     return () => window.clearTimeout(timeout);
   }, []);
 
+  const termsAccepted = acceptedTermsLanguage === language;
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
   const remainingBytes = Math.max(0, totalSize - uploadedBytes);
   const totalProgress = totalSize ? Math.min(100, Math.round((uploadedBytes / totalSize) * 100)) : 0;
@@ -379,7 +393,7 @@ export function TransferPanel({ language }: { language: Language }) {
   }
 
   async function createTransfer(uploadFiles = files) {
-    if (!uploadFiles.length || uploadingRef.current) return;
+    if (!uploadFiles.length || uploadingRef.current || !termsAccepted) return;
     uploadingRef.current = true;
     pausedRef.current = false;
     setUploading(true);
@@ -411,6 +425,7 @@ export function TransferPanel({ language }: { language: Language }) {
           files: uploadFiles.map((file) => ({ size: encryptedFileSize(file.size), plaintextSize: file.size })),
           days: Number(days),
           encryption: { version: 1, metadata: encryptedMetadata },
+          terms: { accepted: true, version: TERMS_VERSION, language },
         }),
       });
       const session = await response.json() as UploadSession & { error?: string };
@@ -682,6 +697,7 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploading(false);
     setPaused(false);
     setFiles([]);
+    setAcceptedTermsLanguage(null);
     setUploadedBytes(0);
     setUploadSpeed(0);
     setError("");
@@ -799,6 +815,7 @@ export function TransferPanel({ language }: { language: Language }) {
   function reset() {
     setFiles([]);
     setMessage("");
+    setAcceptedTermsLanguage(null);
     setResult(null);
     setCopied(false);
     setUploadedBytes(0);
@@ -839,6 +856,7 @@ export function TransferPanel({ language }: { language: Language }) {
         </button>
         <div className="sendebude-footer-links">
           <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+          <a className="sendebude-data-link" href="/nutzungsbedingungen"><ScrollText size={15} aria-hidden="true" /><span>{text.termsTitle}</span></a>
           <a className="sendebude-data-link" href="/impressum"><FileText size={15} aria-hidden="true" /><span>{text.imprintTitle}</span></a>
         </div>
         <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
@@ -965,12 +983,32 @@ export function TransferPanel({ language }: { language: Language }) {
         </label>
       </div>
 
+      {!uploading && !recovery && (
+        <div className="terms-consent">
+          <input
+            id="terms-accepted"
+            type="checkbox"
+            required
+            checked={termsAccepted}
+            onChange={(event) => setAcceptedTermsLanguage(event.target.checked ? language : null)}
+            aria-labelledby="terms-consent-copy"
+          />
+          <span id="terms-consent-copy">
+            <label htmlFor="terms-accepted">{text.termsAcceptanceStart}{" "}</label>
+            <a href="/nutzungsbedingungen" target="_blank" rel="noreferrer">{text.termsTitle}</a>{" "}
+            <label htmlFor="terms-accepted">{text.termsAcceptanceMiddle}{" "}</label>
+            <a href="/datenschutz" target="_blank" rel="noreferrer">{text.privacyAcknowledgementTitle}</a>
+            <label htmlFor="terms-accepted">{language === "de" ? " " : null}{text.termsAcceptanceEnd}</label>
+          </span>
+        </div>
+      )}
+
       {error && <p className="form-error" role="alert">{error}</p>}
 
       <button
         className="primary-button"
         type="button"
-        disabled={!files.length || uploading}
+        disabled={!files.length || uploading || !termsAccepted}
         onClick={() => void createTransfer(files)}
       >
         <Send size={18} aria-hidden="true" />
@@ -979,6 +1017,7 @@ export function TransferPanel({ language }: { language: Language }) {
 
       <div className="sendebude-footer-links">
         <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
+        <a className="sendebude-data-link" href="/nutzungsbedingungen"><ScrollText size={15} aria-hidden="true" /><span>{text.termsTitle}</span></a>
         <a className="sendebude-data-link" href="/impressum"><FileText size={15} aria-hidden="true" /><span>{text.imprintTitle}</span></a>
       </div>
     </section>
