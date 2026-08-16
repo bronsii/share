@@ -61,6 +61,7 @@ test("SEO-Ausgaben verwenden feste Produktions-URLs und schützen nicht öffentl
     ["/", SITE_URL],
     ["/datenschutz?utm_source=test", `${SITE_URL}/datenschutz`],
     ["/impressum", `${SITE_URL}/impressum`],
+    ["/nutzungsbedingungen", `${SITE_URL}/nutzungsbedingungen`],
   ];
 
   for (const [route, expectedUrl] of publicPages) {
@@ -124,7 +125,7 @@ test("SEO-Ausgaben verwenden feste Produktions-URLs und schützen nicht öffentl
   assert.match(sitemapResponse.headers.get("content-type") ?? "", /^application\/xml\b/iu);
   assert.deepEqual(
     [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1]),
-    [SITE_URL, `${SITE_URL}/datenschutz`, `${SITE_URL}/impressum`],
+    [SITE_URL, `${SITE_URL}/datenschutz`, `${SITE_URL}/impressum`, `${SITE_URL}/nutzungsbedingungen`],
   );
   assert.equal(sitemap.includes("evil.example"), false);
   assert.doesNotMatch(sitemap, /\/(?:api|t|verwaltung)(?:\/|<)/u);

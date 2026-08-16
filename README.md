@@ -4,6 +4,7 @@ Registrierungsfreier Dateiaustausch mit clientseitiger Ende-zu-Ende-Verschlüsse
 
 - [Sendebude ausprobieren](https://sendebude.de)
 - [Quellcode auf GitHub](https://github.com/bronsii/share)
+- [Nutzungsbedingungen](https://sendebude.de/nutzungsbedingungen)
 
 Pro Übertragung sind bis zu 20 Dateien mit zusammen höchstens 5 GiB und einer Laufzeit von 1, 3 oder 7 Tagen möglich. Die Oberfläche ist auf Deutsch und Englisch verfügbar.
 
@@ -27,7 +28,7 @@ Neue Übertragungen verwenden das versionierte Format `v1`:
 - Dateinamen, MIME-Typen und die optionale Notiz werden gemeinsam mit AES-256-GCM verschlüsselt.
 - Dateien werden in 4-MiB-Blöcken mit AES-256-GCM verschlüsselt. Jeder Block besitzt einen 16-Byte-Authentifizierungstag.
 - Jede Datei erhält eine zufällige 96-Bit-Nonce-Basis. Der jeweilige Blockindex wird zur Basis addiert, sodass innerhalb einer Datei kein Nonce wiederverwendet wird.
-- Der Server speichert Chiffretext, verschlüsselte Metadaten, Dateianzahl, verschlüsselte und unverschlüsselte Größen sowie Ablauf- und Betriebsdaten.
+- Der Server speichert Chiffretext, verschlüsselte Metadaten, Dateianzahl, verschlüsselte und unverschlüsselte Größen, Fassung, Sprache und Bestätigungszeitpunkt der akzeptierten Nutzungsbedingungen sowie Ablauf- und Betriebsdaten. Die Zustimmungsangaben werden zusammen mit der Übertragung gelöscht.
 - Downloads werden blockweise im Browser entschlüsselt und über einen Service Worker mit Backpressure direkt in den Browser-Download gestreamt.
 
 Der unverschlüsselte Upload-Endpunkt ist deaktiviert. Bereits vorhandene ältere Freigaben ohne `encryption`-Eintrag im Manifest bleiben herunterladbar.

@@ -37,6 +37,11 @@ export const downloadCopy = {
     downloadCancelled: "Download wurde abgebrochen.",
     decryptionFailed: "Entschlüsselung fehlgeschlagen.",
     fileDecryptFailed: "Der Download konnte nicht entschlüsselt werden.",
+    legalInformation: "Rechtliche Informationen",
+    privacy: "Datenschutz",
+    terms: "Nutzungsbedingungen",
+    report: "Inhalt melden",
+    imprint: "Impressum",
     locale: "de-DE",
   },
   en: {
@@ -75,6 +80,11 @@ export const downloadCopy = {
     downloadCancelled: "The download was cancelled.",
     decryptionFailed: "Decryption failed.",
     fileDecryptFailed: "The download could not be decrypted.",
+    legalInformation: "Legal information",
+    privacy: "Privacy",
+    terms: "Terms of Use",
+    report: "Report content",
+    imprint: "Legal notice",
     locale: "en-GB",
   },
 } as const satisfies Record<UiLanguage, object>;

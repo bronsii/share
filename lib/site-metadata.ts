@@ -5,7 +5,7 @@ export const SITE_ORIGIN = "https://sendebude.de";
 
 type PageMetadataOptions = {
   language: UiLanguage;
-  pathname: "/" | "/datenschutz" | "/impressum";
+  pathname: "/" | "/datenschutz" | "/impressum" | "/nutzungsbedingungen";
   title: string;
   description: string;
 };

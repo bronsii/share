@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GCM_TAG_SIZE, PLAINTEXT_CHUNK_SIZE } from "@/lib/e2e-crypto";
+import { TERMS_VERSION } from "@/lib/terms";
 import {
   cleanupExpiredTransfers,
   countIncompleteUploadSessions,
@@ -68,6 +69,7 @@ type UploadRequest = {
   files?: Array<{ size?: number; plaintextSize?: number }>;
   days?: number;
   encryption?: { version?: number; metadata?: string };
+  terms?: { accepted?: boolean; version?: string; language?: string };
 };
 
 export async function POST(request: Request) {
@@ -100,6 +102,15 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody<UploadRequest>(request, MAX_SESSION_REQUEST_BYTES);
+    const termsLanguage = body.terms?.language;
+    if (body.terms?.accepted !== true
+      || body.terms.version !== TERMS_VERSION
+      || (termsLanguage !== "de" && termsLanguage !== "en")) {
+      return NextResponse.json(
+        { error: "Bitte akzeptiere die aktuellen Nutzungsbedingungen." },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     if (!Array.isArray(body.files) || body.files.length < 1 || body.files.length > MAX_FILES) {
       return NextResponse.json({ error: `Bitte w\u00e4hle zwischen 1 und ${MAX_FILES} Dateien aus.` }, { status: 400 });
     }
@@ -175,6 +186,11 @@ export async function POST(request: Request) {
         message: "",
         files,
         encryption: { version: 1, metadata: body.encryption!.metadata!, chunkSize: PLAINTEXT_CHUNK_SIZE },
+        termsAcceptance: {
+          version: TERMS_VERSION,
+          language: termsLanguage,
+          acceptedAt: now.toISOString(),
+        },
         storageReservationId,
         security: { ownerKey },
       };

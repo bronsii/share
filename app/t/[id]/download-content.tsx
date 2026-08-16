@@ -29,6 +29,14 @@ type Props = {
 export function DownloadContent({ initialLanguage, state, transfer }: Props) {
   const [language, changeLanguage] = useUiLanguage(initialLanguage);
   const copy = downloadCopy[language];
+  const legalLinks = (
+    <nav className="download-legal-links" aria-label={copy.legalInformation}>
+      <Link href="/datenschutz">{copy.privacy}</Link>
+      <Link href="/nutzungsbedingungen">{copy.terms}</Link>
+      <Link href="/nutzungsbedingungen#rechtswidrige-inhalte-melden">{copy.report}</Link>
+      <Link href="/impressum">{copy.imprint}</Link>
+    </nav>
+  );
 
   if (state !== "ready" || !transfer) {
     const expired = state === "expired";
@@ -45,6 +53,7 @@ export function DownloadContent({ initialLanguage, state, transfer }: Props) {
           <p>{expired ? copy.expiredBody : copy.missingBody}</p>
           <Link className="primary-button as-link" href="/"><ArrowLeft size={18} /> {copy.home}</Link>
         </section>
+        {legalLinks}
       </main>
     );
   }
@@ -100,6 +109,7 @@ export function DownloadContent({ initialLanguage, state, transfer }: Props) {
           <div className="download-expiry"><ShieldCheck size={18} /><span>{copy.validUntil} <strong>{expires}{copy.clockSuffix ? ` ${copy.clockSuffix}` : ""}</strong>.</span></div>
         </section>
       )}
+      {legalLinks}
     </main>
   );
 }
