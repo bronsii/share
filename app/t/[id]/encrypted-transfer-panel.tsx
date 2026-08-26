@@ -218,7 +218,6 @@ export function EncryptedTransferPanel({ id, encryptedMetadata, files, expiresAt
       });
       const anchor = document.createElement("a");
       anchor.href = `/e2e-download/${token}?lang=${language}`;
-      anchor.download = "";
       anchor.hidden = true;
       document.body.append(anchor);
       anchor.click();
