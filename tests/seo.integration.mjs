@@ -6,7 +6,7 @@ import test from "node:test";
 import { startNextTestServer } from "./next-test-server.mjs";
 
 const SITE_URL = "https://sendebude.de";
-const OG_IMAGE_URL = `${SITE_URL}/og.png`;
+const OG_IMAGE_URL = `${SITE_URL}/og-sendebude-v1.png`;
 const GOOGLE_SITE_VERIFICATION = "kKxsG0tD3_gn0ibh0Z6r5D3b2-W5SIzcEw7ymq6SaBw";
 const BOT_HEADERS = {
   "Accept-Language": "de",
@@ -130,7 +130,7 @@ test("SEO-Ausgaben verwenden feste Produktions-URLs und schützen nicht öffentl
   assert.equal(sitemap.includes("evil.example"), false);
   assert.doesNotMatch(sitemap, /\/(?:api|t|verwaltung)(?:\/|<)/u);
 
-  const imageResponse = await request("/og.png", { headers: BOT_HEADERS });
+  const imageResponse = await request("/og-sendebude-v1.png", { headers: BOT_HEADERS });
   assert.equal(imageResponse.status, 200);
   assert.match(imageResponse.headers.get("content-type") ?? "", /^image\/png\b/iu);
 });

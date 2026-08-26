@@ -17,7 +17,7 @@ export function publicPageMetadata({
   description,
 }: PageMetadataOptions): Metadata {
   const canonical = pathname === "/" ? SITE_ORIGIN : `${SITE_ORIGIN}${pathname}`;
-  const image = `${SITE_ORIGIN}/og.png`;
+  const image = `${SITE_ORIGIN}/og-sendebude-v1.png`;
 
   return {
     title,
@@ -41,10 +41,10 @@ export function publicPageMetadata({
       url: canonical,
       title,
       description,
-      images: [{ url: image, width: 1200, height: 630, alt: title }],
+      images: [{ url: image, width: 1200, height: 1200, type: "image/png", alt: title }],
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title,
       description,
       images: [image],
@@ -57,7 +57,7 @@ export function privatePageMetadata({
   title,
   description,
 }: Omit<PageMetadataOptions, "pathname">): Metadata {
-  const image = `${SITE_ORIGIN}/og-private-v3.png`;
+  const image = `${SITE_ORIGIN}/og-sendebude-v1.png`;
   const privateRobots = {
     index: false,
     follow: false,
