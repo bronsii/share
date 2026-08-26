@@ -57,6 +57,7 @@ export function privatePageMetadata({
   title,
   description,
 }: Omit<PageMetadataOptions, "pathname">): Metadata {
+  const image = `${SITE_ORIGIN}/og-private-v3.png`;
   const privateRobots = {
     index: false,
     follow: false,
@@ -79,13 +80,13 @@ export function privatePageMetadata({
       locale: language === "de" ? "de_DE" : "en_US",
       title,
       description,
-      images: [{ url: `${SITE_ORIGIN}/og.png`, width: 1200, height: 630, alt: title }],
+      images: [{ url: image, width: 1200, height: 1200, type: "image/png", alt: title }],
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title,
       description,
-      images: [`${SITE_ORIGIN}/og.png`],
+      images: [image],
     },
   };
 }
