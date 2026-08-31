@@ -104,12 +104,13 @@ export async function saveBrowserDownload(options: Options) {
       };
     });
     arm(15_000, copy.downloadStartTimeout);
-    // Keep download navigation out of the app document, including on network errors.
-    // A failed top-level navigation can detach Firefox/Safari's page event handlers.
+    // Keep native download navigation out of the app document, including on errors.
     frame = document.createElement("iframe");
     frame.hidden = true;
     frame.title = copy.download;
     frame.referrerPolicy = "no-referrer";
+    // WebKit needs scripts permitted for the frame's Service Worker controller.
+    frame.setAttribute("sandbox", "allow-same-origin allow-scripts allow-downloads");
     frame.src = `/e2e-download/${token}?lang=${options.language}`;
     document.body.append(frame);
     await completion;

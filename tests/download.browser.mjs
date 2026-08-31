@@ -44,7 +44,9 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     const baseUrl = `https://127.0.0.1:${proxy.address().port}`;
     const browser = await browsers[name].launch({ ...(name === "webkit" && process.env.TEST_WEBKIT_EXECUTABLE ? { executablePath: process.env.TEST_WEBKIT_EXECUTABLE } : {}), ...(name === "chromium" ? { args: ["--ignore-certificate-errors"] } : {}) });
     context.after(() => browser.close());
-    const browserContext = await browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true, acceptDownloads: true, locale: "de-DE", viewport: { width: 1440, height: 1000 } });
+    // Smooth scrolling can race Firefox's synthetic clicks on off-screen controls.
+    // Use the site's own reduced-motion support for deterministic interactions.
+    const browserContext = await browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true, acceptDownloads: true, reducedMotion: "reduce", locale: "de-DE", viewport: { width: 1440, height: 1000 } });
     const page = await browserContext.newPage();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
