@@ -135,7 +135,8 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     await expect(page.locator(".download-status-failed")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole("button", { name: "Erneut versuchen", exact: true })).toBeVisible();
     await writeFile(cipherPath, ciphertext);
-    const retry = await downloadAndRead(() => page.getByRole("button", { name: "Erneut versuchen", exact: true }).click());
+    // Also verify that recovery can be operated from the keyboard.
+    const retry = await downloadAndRead(() => page.getByRole("button", { name: "Erneut versuchen", exact: true }).press("Enter"));
     assert.deepEqual(retry.bytes, binary);
     slow = true;
     await downloadButton.click();
@@ -153,9 +154,9 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     assert.equal(requests.some((url) => url.endsWith("/manage")), false, "Opening the sender link must never delete anything");
     await page.bringToFront();
     if (name === "firefox") await page.keyboard.press("Escape");
-    await page.getByText("Ja, diese Freigabe unwiderruflich löschen.", { exact: true }).click();
+    await page.getByRole("checkbox").press("Space");
     await expect(page.getByRole("checkbox")).toBeChecked();
-    await deleteButton.click();
+    await deleteButton.press("Enter");
     await expect(page.getByRole("heading", { name: "Freigabe gelöscht." })).toBeVisible();
     assert.equal(new URL(page.url()).hash, "");
     await navigate(shareUrl);
