@@ -81,6 +81,8 @@ test("Gespeicherte Upload-Wiederaufnahme wird streng validiert", () => {
     message: "Notiz",
   };
   assert.equal(validUploadRecovery(recovery), true);
+  assert.equal(validUploadRecovery({ ...recovery, managementToken: "b".repeat(43) }), true);
+  assert.equal(validUploadRecovery({ ...recovery, managementToken: "invalid" }), false);
   assert.equal(validUploadRecovery({ ...recovery, fragment: "invalid" }), false);
   assert.equal(validUploadRecovery({ ...recovery, files: [{ ...recovery.files[0], size: 0 }] }), false);
   assert.equal(validUploadRecovery({ ...recovery, days: "30" }), false);

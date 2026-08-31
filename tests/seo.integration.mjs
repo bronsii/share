@@ -87,7 +87,7 @@ test("SEO-Ausgaben verwenden feste Produktions-URLs und schützen nicht öffentl
     }
   }
 
-  for (const route of ["/verwaltung", "/t/fake"]) {
+  for (const route of ["/verwaltung", "/t/fake", "/verwalten/fake"]) {
     const response = await request(route, { headers: BOT_HEADERS });
     const html = await response.text();
     const head = documentHead(html);

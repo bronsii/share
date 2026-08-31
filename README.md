@@ -8,6 +8,16 @@ Registrierungsfreier Dateiaustausch mit clientseitiger Ende-zu-Ende-Verschlüsse
 
 Pro Übertragung sind bis zu 20 Dateien mit zusammen höchstens 5 GiB und einer Laufzeit von 1, 3 oder 7 Tagen möglich. Die Oberfläche ist auf Deutsch und Englisch verfügbar.
 
+## Teilen und herunterladen
+
+- Beschriftete Download-Schaltflächen zeigen Vorbereitung, Fortschritt, Fehler und die Übergabe an den Browser an. Ob die Datei tatsächlich gespeichert wurde, bestätigt der Download-Bereich des Browsers.
+- Mehrere verschlüsselte Dateien können gemeinsam als ZIP64-Archiv heruntergeladen werden. Entschlüsselung und ZIP-Erstellung geschehen blockweise auf dem Empfängergerät, nicht auf dem Server. Die Dateien werden nicht zusätzlich komprimiert. Gleichnamige Dateien bekommen eindeutige ZIP-Namen.
+- Der QR-Code der Upload-Bestätigung wird ausschließlich lokal erzeugt. Er enthält den vollständigen Empfängerlink einschließlich Entschlüsselungsschlüssel. Jeder mit diesem QR-Code kann die Freigabe lesen.
+- Zusätzlich erhält der Absender bei neuen Uploads einen unabhängigen privaten Löschlink. Diesen vor dem Verlassen der Bestätigung selbst aufbewahren und nicht an Empfänger weitergeben. Öffnen allein löscht nichts; die Löschung muss bestätigt werden. Bereits gespeicherte Kopien oder laufende Downloads können nicht zurückgerufen werden.
+- Relative Restlaufzeit und das genaue Ablaufdatum werden gemeinsam angezeigt.
+
+Der Löschlink enthält eine eigene zufällige 256-Bit-Berechtigung im Fragment `#m1.…`, unabhängig vom `#v1.…`-Dateischlüssel. Bei der Upload-Erstellung wird nur deren SHA-256-Hash gespeichert. Erst die explizite Löschanfrage übermittelt die Berechtigung in einem Authorization-Header über HTTPS; die API prüft Ursprung, Rate-Limit und Hash mit zeitkonstantem Vergleich. Empfänger erhalten weder Berechtigung noch Hash. Verlorene Löschlinks können nicht wiederhergestellt werden; ältere Freigaben ohne Hash laufen weiterhin regulär ab. Die private Löschseite ist von Suchmaschinen ausgeschlossen.
+
 ## Architektur und Datenfluss
 
 ```text
@@ -38,7 +48,7 @@ Der unverschlüsselte Upload-Endpunkt ist deaktiviert. Bereits vorhandene älter
 Ein Upload kann pausiert und im selben Browser-Tab nach einem Neuladen fortgesetzt werden. Dafür speichert der Browser vorübergehend im `sessionStorage`:
 
 - Sitzungs-, Transfer- und Datei-IDs sowie Ablauf- und Größenangaben,
-- Schlüsselmaterial und Nonce-Basen,
+- Schlüsselmaterial, Nonce-Basen und bei neuen Uploads die separate Löschberechtigung,
 - Dateinamen, Größen und Änderungszeitpunkte der ausgewählten lokalen Dateien,
 - gewählte Laufzeit und optionale Notiz.
 
@@ -54,7 +64,7 @@ Beim Verwerfen einer Wiederaufnahme löscht der Browser seine lokalen Angaben un
 - Ende-zu-Ende-Verschlüsselung verhindert eine serverseitige Schadsoftwareprüfung. Empfänger sollten nur Dateien aus vertrauenswürdigen Quellen öffnen.
 - Für dieses Repository ist derzeit kein unabhängiges Kryptografie- oder Sicherheits-Audit dokumentiert.
 - Das serverseitige Limit von 5 GiB garantiert nicht, dass jeder Browser und jedes Gerät eine so große Datei zuverlässig verarbeiten kann. Erforderlich sind insbesondere Web Crypto, Service Worker und Streaming-Schnittstellen.
-- Mehrere verschlüsselte Dateien werden einzeln heruntergeladen; der Server kann daraus mangels Schlüssel kein ZIP erstellen.
+- Der Server kann mangels Schlüssel kein entschlüsseltes ZIP erstellen. Der Sammeldownload läuft im Browser; die Seite muss bis zum Abschluss geöffnet bleiben. Browser- oder Betriebssystemgrenzen und ausreichend freier Gerätespeicher gelten weiterhin.
 
 Sichere Deployments, eine restriktive CSP, kontrollierte Abhängigkeiten und unabhängige Prüfungen gehören deshalb zum Vertrauensmodell.
 
@@ -76,6 +86,16 @@ npm run check
 ```
 
 Der Befehl führt ESLint, TypeScript-Prüfung, Unit- und Integrationstests sowie den Produktions-Build aus.
+
+Die ZIP-Tests verwenden zusätzlich Python 3 als unabhängigen ZIP-Leser. Für echte Browser-Tests (Chromium, Firefox, WebKit) werden Python 3, OpenSSL und die Playwright-Browser mit ihren Systembibliotheken benötigt:
+
+```bash
+npx playwright install --with-deps chromium firefox webkit
+npm run build
+npm run test:browser
+```
+
+Die Browser-Tests verwenden einen isolierten HTTPS-Testproxy und eigene kurzlebige Testdaten unter `work/`, niemals produktive Freigaben. Geprüft werden Upload und Verschlüsselung, QR-Inhalt einschließlich Fragment, Einzel- und ZIP-Downloads samt Dateiinhalten, Fehler/Wiederholung, Abbruch, schmale Ansichten und bestätigte Löschung. `TEST_BROWSERS=chromium,firefox npm run test:browser` beschränkt einen lokalen Lauf; nicht ausgeführte Browser sind damit nicht geprüft. WebKit unter Linux ersetzt keinen Test auf einem echten iPhone. Die 5-GiB-Grenze wird strukturell im ZIP64-Header geprüft, nicht durch einen vollständigen 5-GiB-Browserdownload.
 
 ## Konfiguration
 

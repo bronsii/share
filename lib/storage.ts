@@ -29,6 +29,7 @@ export type TransferManifest = {
   termsAcceptance?: { version: string; language: "de" | "en"; acceptedAt: string };
   views?: number;
   downloads?: number;
+  managementTokenHash?: string;
 };
 
 export type UploadSession = TransferManifest & {

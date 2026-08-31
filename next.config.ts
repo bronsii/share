@@ -42,6 +42,13 @@ const nextConfig: NextConfig = {
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex" },
         ],
       },
+      {
+        source: "/verwalten/:path*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
     ];
   },
 };

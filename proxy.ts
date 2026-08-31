@@ -15,7 +15,8 @@ export function proxy(request: NextRequest) {
     "worker-src 'self'",
     "object-src 'none'",
     "media-src 'none'",
-    "frame-src 'none'",
+    // Same-origin download frame; application pages still prohibit framing.
+    "frame-src 'self'",
     "base-uri 'none'",
     "form-action 'self'",
     "frame-ancestors 'none'",

@@ -10,7 +10,8 @@
     "dev": "next dev",
     "build": "next build",
     "cleanup": "node scripts/cleanup-expired.mjs",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:browser": "node --experimental-strip-types --test tests/*.browser.mjs",
     "test:integration": "npm run build && npm run test:integration:built",
     "test:integration:built": "node --test tests/*.integration.mjs",
     "start": "next start --hostname 127.0.0.1",
@@ -21,14 +22,17 @@
   "dependencies": {
     "lucide-react": "^1.29.0",
     "next": "16.3.0",
+    "qrcode": "^1.5.4",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "16.3.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
@@ -36,6 +40,7 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
+    "jsqr": "^1.4.0",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "typescript-eslint": "8.59.3"

@@ -34,6 +34,9 @@ import { TERMS_VERSION } from "@/lib/terms";
 import type { UiLanguage } from "@/lib/ui-language";
 import { orderRecoveryFiles, validUploadRecovery } from "@/lib/upload-recovery.mjs";
 import { FileGlyph } from "./file-glyph";
+import { createManagementToken, managementUrl } from "@/lib/management-token";
+import { ShareExtras } from "./share-extras";
+import { ExpiryLabel } from "./expiry-label";
 
 const MAX_FILES = 20;
 const MAX_TOTAL_SIZE = 5 * 1024 ** 3;
@@ -168,6 +171,7 @@ type UploadResult = {
   id: string;
   url: string;
   expiresAt: string;
+  managementUrl?: string;
 };
 
 type UploadSession = {
@@ -179,6 +183,7 @@ type UploadSession = {
 type ClientEncryptionState = {
   key: CryptoKey;
   fragment: string;
+  managementToken?: string;
   noncePrefixes: Uint8Array[];
 };
 
@@ -192,6 +197,7 @@ type UploadRecovery = {
   version: 1;
   session: UploadSession;
   fragment: string;
+  managementToken?: string;
   noncePrefixes: string[];
   files: RecoveryFile[];
   days: string;
@@ -377,7 +383,7 @@ export function TransferPanel({ language }: { language: Language }) {
       const key = await importTransferKey(storedRecovery.fragment);
       const noncePrefixes = storedRecovery.noncePrefixes.map(decodeNoncePrefix);
       sessionRef.current = storedRecovery.session;
-      encryptionRef.current = { key, fragment: storedRecovery.fragment, noncePrefixes };
+      encryptionRef.current = { key, fragment: storedRecovery.fragment, noncePrefixes, managementToken: storedRecovery.managementToken };
       setRecovery(null);
       await continueUpload(orderedFiles, storedRecovery.session, generation);
     } catch (uploadError) {
@@ -420,6 +426,7 @@ export function TransferPanel({ language }: { language: Language }) {
     setError("");
     try {
       const { key, fragment } = await createTransferKey();
+      const management = await createManagementToken();
       const noncePrefixes = uploadFiles.map(() => createNoncePrefix());
       const encryptedMetadata = await encryptMetadata(key, {
         version: 1,
@@ -431,13 +438,14 @@ export function TransferPanel({ language }: { language: Language }) {
           noncePrefix: encodeNoncePrefix(noncePrefixes[index]),
         })),
       });
-      encryptionRef.current = { key, fragment, noncePrefixes };
+      encryptionRef.current = { key, fragment, noncePrefixes, managementToken: management.token };
       const response = await fetch("/api/uploads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           files: uploadFiles.map((file) => ({ size: encryptedFileSize(file.size), plaintextSize: file.size })),
           days: Number(days),
+          managementTokenHash: management.hash,
           encryption: { version: 1, metadata: encryptedMetadata },
           terms: { accepted: true, version: TERMS_VERSION, language },
         }),
@@ -472,6 +480,7 @@ export function TransferPanel({ language }: { language: Language }) {
       version: 1,
       session,
       fragment: encryption.fragment,
+      managementToken: encryption.managementToken,
       noncePrefixes: encryption.noncePrefixes.map(encodeNoncePrefix),
       files: uploadFiles.map((file) => ({ name: file.name, size: file.size, lastModified: file.lastModified })),
       days,
@@ -544,7 +553,7 @@ export function TransferPanel({ language }: { language: Language }) {
       if (completeResponse.ok && completed.url && encryption) {
         setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
         setUploadSpeed(0);
-        setResult({ ...completed, url: `${completed.url}#${encryption.fragment}` });
+        setResult({ ...completed, url: `${completed.url}#${encryption.fragment}`, managementUrl: managementUrl(completed.url, completed.id, encryption.managementToken) });
         setCopied(false);
         clearUploadRecovery();
         sessionRef.current = null;
@@ -651,7 +660,7 @@ export function TransferPanel({ language }: { language: Language }) {
       if (!completeResponse.ok || !payload.url) throw new Error(payload.error || text.uploadFailed);
       setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
       setUploadSpeed(0);
-      setResult({ ...payload, url: `${payload.url}#${encryption.fragment}` });
+      setResult({ ...payload, url: `${payload.url}#${encryption.fragment}`, managementUrl: managementUrl(payload.url, payload.id, encryption.managementToken) });
       setCopied(false);
       clearUploadRecovery();
       sessionRef.current = null;
@@ -862,12 +871,14 @@ export function TransferPanel({ language }: { language: Language }) {
           <span>{files.length} {files.length === 1 ? text.file : text.files}</span>
           <span>{formatBytes(totalSize)}</span>
           <span>{text.until} {new Intl.DateTimeFormat(text.locale, { dateStyle: "medium" }).format(new Date(result.expiresAt))}</span>
+          <ExpiryLabel expiresAt={result.expiresAt} language={language} />
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button" type="button" onClick={shareLink}>
           {copied ? <Check size={18} /> : <Send size={18} />}
           {copied ? text.linkCopied : text.shareAction}
         </button>
+        <ShareExtras url={result.url} managementUrl={result.managementUrl} language={language} />
         <div className="sendebude-footer-links">
           <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
           <a className="sendebude-data-link" href="/nutzungsbedingungen"><ScrollText size={15} aria-hidden="true" /><span>{text.termsTitle}</span></a>

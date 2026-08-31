@@ -68,6 +68,7 @@ async function withUploadAdmission<T>(operation: () => Promise<T>) {
 type UploadRequest = {
   files?: Array<{ size?: number; plaintextSize?: number }>;
   days?: number;
+  managementTokenHash?: string;
   encryption?: { version?: number; metadata?: string };
   terms?: { accepted?: boolean; version?: string; language?: string };
 };
@@ -102,6 +103,9 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonBody<UploadRequest>(request, MAX_SESSION_REQUEST_BYTES);
+    if (body.managementTokenHash !== undefined && (typeof body.managementTokenHash !== "string" || !/^[a-f0-9]{64}$/u.test(body.managementTokenHash))) {
+      return NextResponse.json({ error: "Ungültiger Verwaltungsschlüssel." }, { status: 400 });
+    }
     const termsLanguage = body.terms?.language;
     if (body.terms?.accepted !== true
       || body.terms.version !== TERMS_VERSION
@@ -193,6 +197,7 @@ export async function POST(request: Request) {
         },
         storageReservationId,
         security: { ownerKey },
+        ...(body.managementTokenHash ? { managementTokenHash: body.managementTokenHash } : {}),
       };
       await writeUploadSession(nextSession);
       return nextSession;

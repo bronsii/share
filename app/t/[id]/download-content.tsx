@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, Clock3, Download, FileArchive, ShieldCheck } from "lucide-react";
 import { FileGlyph } from "@/app/file-glyph";
+import { ExpiryLabel } from "@/app/expiry-label";
 import { LanguageSwitch } from "@/app/language-switch";
 import { formatBytes } from "@/lib/format-bytes";
 import type { UiLanguage } from "@/lib/ui-language";
@@ -106,7 +107,7 @@ export function DownloadContent({ initialLanguage, state, transfer }: Props) {
               </div>
             ))}
           </div>
-          <div className="download-expiry"><ShieldCheck size={18} /><span>{copy.validUntil} <strong>{expires}{copy.clockSuffix ? ` ${copy.clockSuffix}` : ""}</strong>.</span></div>
+          <div className="download-expiry"><ShieldCheck size={18} /><span><ExpiryLabel expiresAt={transfer.expiresAt} language={language} />{copy.validUntil} <strong>{expires}{copy.clockSuffix ? ` ${copy.clockSuffix}` : ""}</strong>.</span></div>
         </section>
       )}
       {legalLinks}
