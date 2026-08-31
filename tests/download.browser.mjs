@@ -42,7 +42,11 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
     context.after(() => { proxy.closeAllConnections(); proxy.close(); });
     const baseUrl = `https://127.0.0.1:${proxy.address().port}`;
-    const browser = await browsers[name].launch({ ...(name === "webkit" && process.env.TEST_WEBKIT_EXECUTABLE ? { executablePath: process.env.TEST_WEBKIT_EXECUTABLE } : {}), ...(name === "chromium" ? { args: ["--ignore-certificate-errors"] } : {}) });
+    const browser = await browsers[name].launch({
+      ...(name === "webkit" && process.env.TEST_WEBKIT_EXECUTABLE ? { executablePath: process.env.TEST_WEBKIT_EXECUTABLE } : {}),
+      ...(name === "chromium" ? { args: ["--ignore-certificate-errors"] } : {}),
+      ...(name === "firefox" ? { firefoxUserPrefs: { "browser.download.alwaysOpenPanel": false, "browser.download.panel.shown": true } } : {}),
+    });
     context.after(() => browser.close());
     // Smooth scrolling can race Firefox's synthetic clicks on off-screen controls.
     // Use the site's own reduced-motion support for deterministic interactions.
@@ -100,6 +104,9 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     await expect(page.getByText("Prüfung.bin", { exact: true })).toBeVisible();
     const downloadButton = page.getByRole("button", { name: "Prüfung.bin sicher herunterladen", exact: true });
     async function downloadAndRead(action) {
+      // Firefox's native download popover can consume the next synthetic pointer click.
+      // Dismiss browser chrome; do not change any page state or download protection.
+      if (name === "firefox") await page.keyboard.press("Escape");
       const pending = page.waitForEvent("download");
       await action();
       const download = await pending.catch(async (failure) => { throw new Error(`${failure.message}; UI: ${await page.locator(".download-status").textContent({ timeout: 500 }).catch(() => "status missing")}`); });
@@ -118,6 +125,7 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     await page.screenshot({ path: path.join(workRoot, `${name}-download-mobile.png`), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
 
     const cipherPath = path.join(folder, manifest.files[0].storedName);
     const ciphertext = await readFile(cipherPath);
@@ -143,6 +151,8 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     const deleteButton = page.getByRole("button", { name: "Freigabe jetzt löschen", exact: true });
     await expect(deleteButton).toBeDisabled();
     assert.equal(requests.some((url) => url.endsWith("/manage")), false, "Opening the sender link must never delete anything");
+    await page.bringToFront();
+    if (name === "firefox") await page.keyboard.press("Escape");
     await page.getByText("Ja, diese Freigabe unwiderruflich löschen.", { exact: true }).click();
     await expect(page.getByRole("checkbox")).toBeChecked();
     await deleteButton.click();
