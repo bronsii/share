@@ -3,8 +3,9 @@
 import { Check, Clipboard, QrCode, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { UiLanguage } from "@/lib/ui-language";
+import { RememberTransfer } from "./recent-transfers";
 
-export function ShareExtras({ url, managementUrl, language }: { url: string; managementUrl?: string; language: UiLanguage }) {
+export function ShareExtras({ url, managementUrl, expiresAt, language }: { url: string; managementUrl?: string; expiresAt?: string; language: UiLanguage }) {
   const de = language === "de";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [qrOpen, setQrOpen] = useState(false);
@@ -25,6 +26,7 @@ export function ShareExtras({ url, managementUrl, language }: { url: string; man
     catch { setCopyError(true); }
   }
   return <div className="share-extras">
+    {expiresAt && <RememberTransfer key={url} url={url} managementUrl={managementUrl} expiresAt={expiresAt} language={language} />}
     <details onToggle={(event) => setQrOpen(event.currentTarget.open)}>
       <summary><QrCode size={17} aria-hidden="true" />{de ? "Freigabelink als QR-Code" : "Share link as QR code"}</summary>
       <div className="qr-panel">

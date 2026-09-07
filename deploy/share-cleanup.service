@@ -7,7 +7,7 @@ User=bronsi
 Group=bronsi
 WorkingDirectory=/srv/apps/share
 Environment=SHARED_ROOT=/srv/apps/share/shared
-ExecStart=/opt/node/bin/node /srv/apps/share/scripts/cleanup-expired.mjs
+ExecStart=/opt/node/bin/node /srv/apps/share/scripts/cleanup-expired.mjs --scheduled
 
 NoNewPrivileges=true
 PrivateDevices=true

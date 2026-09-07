@@ -8,6 +8,8 @@ import path from "node:path";
 import { GCM_TAG_SIZE } from "@/lib/e2e-crypto";
 import { sanitizeFileName } from "@/lib/file-name.mjs";
 import { cleanupTransfersAtRoot, INCOMPLETE_UPLOAD_MAX_IDLE_MS } from "@/lib/storage-cleanup.mjs";
+import { readStorageSummary } from "@/lib/operations-storage.mjs";
+import { readCleanupSummary } from "@/lib/operations-state.mjs";
 
 export type TransferFile = {
   id: string;
@@ -620,6 +622,14 @@ export async function listTransfersForAdmin(): Promise<AdminTransfer[]> {
   return transfers
     .filter((transfer): transfer is AdminTransfer => transfer !== null)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getOperationsForAdmin() {
+  const [storage, cleanup] = await Promise.all([
+    readStorageSummary({ sharedRoot: SHARED_ROOT, reserveBytes: STORAGE_RESERVE_BYTES }).catch(() => null),
+    readCleanupSummary({ sharedRoot: SHARED_ROOT }),
+  ]);
+  return { checkedAt: new Date().toISOString(), storage, cleanup };
 }
 
 export async function countIncompleteUploadSessions(ownerKey?: string) {

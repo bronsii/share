@@ -16,23 +16,25 @@ import {
 } from "lucide-react";
 import { ChangeEvent, DragEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
-  chunkIndexFromCiphertextOffset,
-  ciphertextOffsetForChunk,
   createNoncePrefix,
   createTransferKey,
   decodeNoncePrefix,
   encodeNoncePrefix,
   encryptedFileSize,
-  encryptChunk,
   encryptMetadata,
   importTransferKey,
-  PLAINTEXT_CHUNK_SIZE,
   plaintextProgressFromCiphertext,
 } from "@/lib/e2e-crypto";
 import { formatBytes } from "@/lib/format-bytes";
 import { TERMS_VERSION } from "@/lib/terms";
 import type { UiLanguage } from "@/lib/ui-language";
-import { orderRecoveryFiles, validUploadRecovery } from "@/lib/upload-recovery.mjs";
+import { orderRecoveryFiles } from "@/lib/upload-recovery.mjs";
+import { uploadTranslations } from "@/lib/upload-copy";
+import { clearUploadRecovery, loadUploadRecovery, saveUploadRecovery } from "@/lib/upload-recovery-storage";
+import { runEncryptedUpload } from "@/lib/upload-transfer";
+import { deleteCancelledUpload, shouldWarnBeforeUploadLeave, UploadUnavailableError } from "@/lib/upload-network";
+import type { UploadRetryState } from "@/lib/upload-network";
+import type { ClientEncryptionState, UploadRecovery, UploadResult, UploadSession } from "@/lib/upload-types";
 import { FileGlyph } from "./file-glyph";
 import { createManagementToken, managementUrl } from "@/lib/management-token";
 import { ShareExtras } from "./share-extras";
@@ -40,198 +42,8 @@ import { ExpiryLabel } from "./expiry-label";
 
 const MAX_FILES = 20;
 const MAX_TOTAL_SIZE = 5 * 1024 ** 3;
-const UPLOAD_RECOVERY_STORAGE_KEY = "share-upload-recovery-v1";
 
 type Language = UiLanguage;
-
-const translations = {
-  de: {
-    tooManyFiles: (maximum: number) => `Du kannst höchstens ${maximum} Dateien auf einmal teilen.`,
-    tooLarge: "Die Übertragung darf insgesamt höchstens 5 GB groß sein.",
-    emptyOrFolder: "Ordner oder leere Dateien können nicht hochgeladen werden. Bitte wähle einzelne Dateien oder packe den Ordner als ZIP-Datei.",
-    uploadFailed: "Die Übertragung konnte nicht erstellt werden.",
-    connectionLost: "Die Verbindung wurde beim Hochladen unterbrochen.",
-    copyManually: "Bitte markiere den Link und kopiere ihn manuell.",
-    shareTitle: "Freigabelink",
-    ready: "Bereit zum Teilen",
-    linkReady: "Dein Link ist fertig.",
-    resultCopy: (plural: boolean) => `Jeder mit diesem Link kann die ${plural ? "Dateien" : "Datei"} bis zum Ablaufdatum herunterladen.`,
-    openLink: "Freigabelink öffnen",
-    copyLink: "Freigabelink kopieren",
-    file: "Datei",
-    files: "Dateien",
-    uploadedFileCount: (completed: number, total: number) => `Dateien ${completed}/${total}`,
-    until: "bis",
-    linkCopied: "Link kopiert",
-    shareLink: "Hochladen & Link erstellen",
-    shareAction: "Link teilen",
-    newTransfer: "Neue Übertragung erstellen",
-    newTransferKicker: "Neue Übertragung",
-    question: "Was möchtest du teilen?",
-    chooseFiles: "Dateien auswählen",
-    dropLabel: "Dateien hier ablegen oder auswählen",
-    dropFiles: "Dateien hier ablegen",
-    clickToChoose: "oder klicken, um auszuwählen",
-    selectedFiles: "Ausgewählte Dateien",
-    ofMaximum: "von 5000\u00a0MB",
-    uploaded: "hochgeladen",
-    perSecond: "pro Sekunde",
-    remaining: "verbleibend",
-    timeRemaining: "Restzeit",
-    remove: "entfernen",
-    pauseUpload: "Upload pausieren",
-    resumeUpload: "Upload fortsetzen",
-    validFor: "Link gültig für",
-    day: "Tag",
-    days: "Tage",
-    note: "Notiz",
-    optional: "optional",
-    placeholder: "z. B. hier sind die Urlaubsfotos …",
-    cancelUpload: "Gesamten Upload abbrechen und löschen",
-    removeUploadingFile: (name: string) => `${name} aus diesem Upload entfernen`,
-    removeFileFailed: "Die Datei konnte nicht aus dem Upload entfernt werden.",
-    recoveryTitle: "Unterbrochenen Upload fortsetzen",
-    recoveryBody: "Wähle dieselben Dateien erneut aus. Danach läuft der Upload automatisch an der letzten bestätigten Stelle weiter.",
-    recoveryChoose: "Dateien erneut auswählen",
-    recoveryDiscard: "Upload verwerfen",
-    recoveryMismatch: "Die ausgewählten Dateien stimmen nicht mit dem unterbrochenen Upload überein.",
-    recoveryUnavailable: "Der unterbrochene Upload ist nicht mehr verfügbar. Bitte starte eine neue Übertragung.",
-    privacyTitle: "Datenschutzhinweise",
-    imprintTitle: "Impressum",
-    termsTitle: "Nutzungsbedingungen",
-    termsAcceptanceStart: "Ich akzeptiere die",
-    termsAcceptanceMiddle: "und habe die",
-    privacyAcknowledgementTitle: "Datenschutzhinweise",
-    termsAcceptanceEnd: "zur Kenntnis genommen.",
-    locale: "de-DE",
-  },
-  en: {
-    tooManyFiles: (maximum: number) => `You can share up to ${maximum} files at once.`,
-    tooLarge: "The transfer may not exceed 5 GB in total.",
-    emptyOrFolder: "Folders or empty files cannot be uploaded. Please choose individual files or create a ZIP archive first.",
-    uploadFailed: "The transfer could not be created.",
-    connectionLost: "The connection was interrupted during upload.",
-    copyManually: "Please select the link and copy it manually.",
-    shareTitle: "Share link",
-    ready: "Ready to share",
-    linkReady: "Your link is ready.",
-    resultCopy: (plural: boolean) => `Anyone with this link can download the ${plural ? "files" : "file"} until it expires.`,
-    openLink: "Open share link",
-    copyLink: "Copy share link",
-    file: "file",
-    files: "files",
-    uploadedFileCount: (completed: number, total: number) => `Files ${completed}/${total}`,
-    until: "until",
-    linkCopied: "Link copied",
-    shareLink: "Upload & create link",
-    shareAction: "Share link",
-    newTransfer: "Create another transfer",
-    newTransferKicker: "New transfer",
-    question: "What are you sharing?",
-    chooseFiles: "Choose files",
-    dropLabel: "Drop files here or choose files",
-    dropFiles: "Drop files here",
-    clickToChoose: "or click to choose",
-    selectedFiles: "Selected files",
-    ofMaximum: "of 5000\u00a0MB",
-    uploaded: "uploaded",
-    perSecond: "per second",
-    remaining: "remaining",
-    timeRemaining: "Time remaining",
-    remove: "remove",
-    pauseUpload: "Pause upload",
-    resumeUpload: "Resume upload",
-    validFor: "Link valid for",
-    day: "day",
-    days: "days",
-    note: "Note",
-    optional: "optional",
-    placeholder: "e.g. here are the holiday photos …",
-    cancelUpload: "Cancel and delete entire upload",
-    removeUploadingFile: (name: string) => `Remove ${name} from this upload`,
-    removeFileFailed: "The file could not be removed from the upload.",
-    recoveryTitle: "Resume interrupted upload",
-    recoveryBody: "Choose the same files again. The upload will automatically continue from the last confirmed position.",
-    recoveryChoose: "Choose files again",
-    recoveryDiscard: "Discard upload",
-    recoveryMismatch: "The selected files do not match the interrupted upload.",
-    recoveryUnavailable: "The interrupted upload is no longer available. Please start a new transfer.",
-    privacyTitle: "Privacy Notice",
-    imprintTitle: "Legal notice",
-    termsTitle: "Terms of Use",
-    termsAcceptanceStart: "I accept the",
-    termsAcceptanceMiddle: "and acknowledge the",
-    privacyAcknowledgementTitle: "Privacy Notice",
-    termsAcceptanceEnd: ".",
-    locale: "en-GB",
-  },
-} as const;
-
-type UploadResult = {
-  id: string;
-  url: string;
-  expiresAt: string;
-  managementUrl?: string;
-};
-
-type UploadSession = {
-  id: string;
-  expiresAt: string;
-  files: Array<{ id: string; name: string; size: number; uploaded: number }>;
-};
-
-type ClientEncryptionState = {
-  key: CryptoKey;
-  fragment: string;
-  managementToken?: string;
-  noncePrefixes: Uint8Array[];
-};
-
-type RecoveryFile = {
-  name: string;
-  size: number;
-  lastModified: number;
-};
-
-type UploadRecovery = {
-  version: 1;
-  session: UploadSession;
-  fragment: string;
-  managementToken?: string;
-  noncePrefixes: string[];
-  files: RecoveryFile[];
-  days: string;
-  message: string;
-};
-
-function loadUploadRecovery() {
-  try {
-    const stored = window.sessionStorage.getItem(UPLOAD_RECOVERY_STORAGE_KEY);
-    if (!stored) return null;
-    const recovery: unknown = JSON.parse(stored);
-    if (validUploadRecovery(recovery)) return recovery as UploadRecovery;
-    window.sessionStorage.removeItem(UPLOAD_RECOVERY_STORAGE_KEY);
-  } catch {
-    // Beschädigte oder blockierte Sitzungsdaten verhindern keinen neuen Upload.
-  }
-  return null;
-}
-
-function saveUploadRecovery(recovery: UploadRecovery) {
-  try {
-    window.sessionStorage.setItem(UPLOAD_RECOVERY_STORAGE_KEY, JSON.stringify(recovery));
-  } catch {
-    // Der Upload funktioniert weiter, nur die Wiederaufnahme nach Reload entfällt.
-  }
-}
-
-function clearUploadRecovery() {
-  try {
-    window.sessionStorage.removeItem(UPLOAD_RECOVERY_STORAGE_KEY);
-  } catch {
-    // Ein blockierter Sitzungsspeicher muss nicht bereinigt werden.
-  }
-}
 
 function formatDuration(seconds: number, language: Language) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—";
@@ -264,11 +76,11 @@ function completedUploadFileCount(files: File[], uploadedBytes: number) {
 }
 
 export function TransferPanel({ language }: { language: Language }) {
-  const text = translations[language];
+  const text = uploadTranslations[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
   const pausedRef = useRef(false);
-  const requestRef = useRef<XMLHttpRequest | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<UploadSession | null>(null);
   const encryptionRef = useRef<ClientEncryptionState | null>(null);
   const uploadGenerationRef = useRef(0);
@@ -290,6 +102,8 @@ export function TransferPanel({ language }: { language: Language }) {
   const [recovery, setRecovery] = useState<UploadRecovery | null>(null);
   const [removingFileKey, setRemovingFileKey] = useState<string | null>(null);
   const [cancellingUpload, setCancellingUpload] = useState(false);
+  const [startingUpload, setStartingUpload] = useState(false);
+  const [retrying, setRetrying] = useState<UploadRetryState | null>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -301,6 +115,28 @@ export function TransferPanel({ language }: { language: Language }) {
     }, 0);
     return () => window.clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    if (!shouldWarnBeforeUploadLeave(uploading, Boolean(recovery), Boolean(result))) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [uploading, recovery, result]);
+
+  useEffect(() => () => {
+    uploadGenerationRef.current += 1;
+    controllerRef.current?.abort();
+  }, []);
+
+  function beginUploadAttempt() {
+    controllerRef.current?.abort();
+    controllerRef.current = new AbortController();
+    setRetrying(null);
+    return ++uploadGenerationRef.current;
+  }
 
   const termsAccepted = acceptedTermsLanguage === language;
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
@@ -315,7 +151,7 @@ export function TransferPanel({ language }: { language: Language }) {
   }
 
   function addFiles(incoming: File[]) {
-    if (uploadingRef.current) return;
+    if (uploadingRef.current || cancellingUploadRef.current) return;
     setError("");
     setResult(null);
     if (recovery) {
@@ -369,6 +205,7 @@ export function TransferPanel({ language }: { language: Language }) {
 
     uploadingRef.current = true;
     pausedRef.current = false;
+    setStartingUpload(true);
     setUploading(true);
     setPaused(false);
     setFiles(orderedFiles);
@@ -377,38 +214,48 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploadSpeed(0);
     setError("");
     speedSampleRef.current = { time: monotonicTimestamp(), bytes: 0, value: 0 };
-    const generation = ++uploadGenerationRef.current;
+    const generation = beginUploadAttempt();
 
     try {
       const key = await importTransferKey(storedRecovery.fragment);
+      if (generation !== uploadGenerationRef.current) return;
       const noncePrefixes = storedRecovery.noncePrefixes.map(decodeNoncePrefix);
       sessionRef.current = storedRecovery.session;
-      encryptionRef.current = { key, fragment: storedRecovery.fragment, noncePrefixes, managementToken: storedRecovery.managementToken };
+      encryptionRef.current = { key, fragment: storedRecovery.fragment, noncePrefixes, managementToken: storedRecovery.managementToken, pendingChunks: new Map() };
       setRecovery(null);
+      setStartingUpload(false);
       await continueUpload(orderedFiles, storedRecovery.session, generation);
     } catch (uploadError) {
+      if (generation !== uploadGenerationRef.current) return;
+      setStartingUpload(false);
       if (sessionRef.current) {
         pausedRef.current = true;
         setPaused(true);
         setUploadSpeed(0);
       } else {
-        clearUploadRecovery();
-        setRecovery(null);
         uploadingRef.current = false;
         setUploading(false);
-        void fetch(`/api/uploads/${storedRecovery.session.id}`, { method: "DELETE" }).catch(() => undefined);
       }
       setError(uploadError instanceof Error ? uploadError.message : text.recoveryUnavailable);
     }
   }
 
   async function discardRecovery() {
+    if (uploadingRef.current || cancellingUploadRef.current) return;
+    if (!window.confirm(text.cancelConfirmation)) return;
     const storedRecovery = recovery;
-    clearUploadRecovery();
-    setRecovery(null);
+    cancellingUploadRef.current = true;
+    setCancellingUpload(true);
     setError("");
-    if (storedRecovery) {
-      await fetch(`/api/uploads/${storedRecovery.session.id}`, { method: "DELETE" }).catch(() => undefined);
+    try {
+      if (storedRecovery) await deleteCancelledUpload(storedRecovery.session.id, storedRecovery.managementToken);
+      clearUploadRecovery();
+      setRecovery(null);
+    } catch {
+      setError(text.cancelFailed);
+    } finally {
+      cancellingUploadRef.current = false;
+      setCancellingUpload(false);
     }
   }
 
@@ -416,13 +263,14 @@ export function TransferPanel({ language }: { language: Language }) {
     if (!uploadFiles.length || uploadingRef.current || !termsAccepted) return;
     uploadingRef.current = true;
     pausedRef.current = false;
+    setStartingUpload(true);
     setUploading(true);
     setPaused(false);
     setCurrentFileIndex(0);
     setUploadedBytes(0);
     setUploadSpeed(0);
     speedSampleRef.current = { time: monotonicTimestamp(), bytes: 0, value: 0 };
-    const generation = ++uploadGenerationRef.current;
+    const generation = beginUploadAttempt();
     setError("");
     try {
       const { key, fragment } = await createTransferKey();
@@ -438,7 +286,8 @@ export function TransferPanel({ language }: { language: Language }) {
           noncePrefix: encodeNoncePrefix(noncePrefixes[index]),
         })),
       });
-      encryptionRef.current = { key, fragment, noncePrefixes, managementToken: management.token };
+      if (generation !== uploadGenerationRef.current) return;
+      encryptionRef.current = { key, fragment, noncePrefixes, managementToken: management.token, pendingChunks: new Map() };
       const response = await fetch("/api/uploads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -452,10 +301,20 @@ export function TransferPanel({ language }: { language: Language }) {
       });
       const session = await response.json() as UploadSession & { error?: string };
       if (!response.ok || !session.id) throw new Error(session.error || text.uploadFailed);
+      // Creation is not replayed or aborted: learn the ID so a cancelled creation can be cleaned up.
+      if (generation !== uploadGenerationRef.current) {
+        void deleteCancelledUpload(session.id, management.token).catch(() => {
+          if (!uploadingRef.current) setError(text.cancelCleanupFailed);
+        });
+        return;
+      }
       sessionRef.current = session;
       persistUploadRecovery(uploadFiles, session, encryptionRef.current);
+      setStartingUpload(false);
       await continueUpload(uploadFiles, session, generation);
     } catch (uploadError) {
+      if (generation !== uploadGenerationRef.current) return;
+      setStartingUpload(false);
       if (!pausedRef.current) {
         if (sessionRef.current) {
           pausedRef.current = true;
@@ -500,164 +359,35 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploadSpeed(smoothed);
   }
 
-  function uploadChunk(
-    sessionId: string,
-    fileId: string,
-    body: Blob | ArrayBuffer,
-    offset: number,
-    progressStart: number,
-    progressBytes: number,
-  ) {
-    return new Promise<number>((resolve, reject) => {
-      const request = new XMLHttpRequest();
-      requestRef.current = request;
-      request.open("PUT", `/api/uploads/${sessionId}/${fileId}`);
-      request.responseType = "json";
-      request.setRequestHeader("X-Upload-Offset", String(offset));
-      const requestBytes = body instanceof Blob ? body.size : body.byteLength;
-      request.upload.addEventListener("progress", (event) => {
-        const fraction = requestBytes > 0 ? Math.min(1, event.loaded / requestBytes) : 0;
-        updateProgress(progressStart + progressBytes * fraction);
-      });
-      request.addEventListener("load", () => {
-        const response = request.response as { uploaded?: number; error?: string } | null;
-        if (requestRef.current === request) requestRef.current = null;
-        if (request.status >= 200 && request.status < 300 && typeof response?.uploaded === "number") resolve(response.uploaded);
-        else reject(new Error(response?.error || text.uploadFailed));
-      });
-      request.addEventListener("error", () => {
-        if (requestRef.current === request) requestRef.current = null;
-        reject(new Error(text.connectionLost));
-      });
-      request.addEventListener("abort", () => {
-        if (requestRef.current === request) requestRef.current = null;
-        reject(new DOMException("Paused", "AbortError"));
-      });
-      request.send(body);
-    });
-  }
-
   async function continueUpload(
     uploadFiles = files,
     knownSession = sessionRef.current,
     generation = uploadGenerationRef.current,
   ) {
-    if (!knownSession || pausedRef.current || generation !== uploadGenerationRef.current) return;
-    const statusResponse = await fetch(`/api/uploads/${knownSession.id}`, { cache: "no-store" });
-    const status = await statusResponse.json() as { files?: Array<{ id: string; uploaded: number }>; error?: string };
-    if (generation !== uploadGenerationRef.current) return;
-    if (statusResponse.status === 404 || statusResponse.status === 410) {
-      const completeResponse = await fetch(`/api/uploads/${knownSession.id}/complete`, { method: "POST" });
-      const completed = await completeResponse.json() as UploadResult & { error?: string };
-      const encryption = encryptionRef.current;
-      if (completeResponse.ok && completed.url && encryption) {
-        setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
-        setUploadSpeed(0);
-        setResult({ ...completed, url: `${completed.url}#${encryption.fragment}`, managementUrl: managementUrl(completed.url, completed.id, encryption.managementToken) });
-        setCopied(false);
-        clearUploadRecovery();
-        sessionRef.current = null;
-        encryptionRef.current = null;
-        uploadingRef.current = false;
-        setUploading(false);
-        return;
-      }
-      clearUploadRecovery();
-      sessionRef.current = null;
-      encryptionRef.current = null;
-      throw new Error(text.recoveryUnavailable);
-    }
-    if (!statusResponse.ok || !status.files) throw new Error(status.error || text.uploadFailed);
-    const offsets = new Map(status.files.map((file) => [file.id, file.uploaded]));
     const encryption = encryptionRef.current;
-    if (encryption) {
-      await continueEncryptedUpload(uploadFiles, knownSession, offsets, encryption, generation);
-      return;
-    }
-    let completedBefore = 0;
-    updateProgress(status.files.reduce((sum, file) => sum + file.uploaded, 0));
+    const controller = controllerRef.current;
+    if (!knownSession || !encryption || !controller || pausedRef.current || generation !== uploadGenerationRef.current) return;
+    const isCurrent = () => generation === uploadGenerationRef.current && !controller.signal.aborted;
     try {
-      for (let index = 0; index < uploadFiles.length; index += 1) {
-        if (generation !== uploadGenerationRef.current) return;
-        const file = uploadFiles[index];
-        const serverFile = knownSession.files[index];
-        setCurrentFileIndex(index);
-        let offset = offsets.get(serverFile.id) ?? 0;
-        while (offset < file.size) {
-          if (pausedRef.current || generation !== uploadGenerationRef.current) return;
-          const end = Math.min(offset + PLAINTEXT_CHUNK_SIZE, file.size);
-          offset = await uploadChunk(knownSession.id, serverFile.id, file.slice(offset, end), offset, completedBefore + offset, end - offset);
-          updateProgress(completedBefore + offset);
-        }
-        completedBefore += file.size;
-      }
-      if (generation !== uploadGenerationRef.current) return;
-      const completeResponse = await fetch(`/api/uploads/${knownSession.id}/complete`, { method: "POST" });
-      const payload = await completeResponse.json() as UploadResult & { error?: string };
-      if (generation !== uploadGenerationRef.current) return;
-      if (!completeResponse.ok || !payload.url) throw new Error(payload.error || text.uploadFailed);
-      setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
-      setUploadSpeed(0);
-      setResult(payload);
-      setCopied(false);
-      clearUploadRecovery();
-      sessionRef.current = null;
-      uploadingRef.current = false;
-      setUploading(false);
-    } catch (uploadError) {
-      if (generation !== uploadGenerationRef.current) return;
-      if (uploadError instanceof DOMException && uploadError.name === "AbortError" && pausedRef.current) return;
-      throw uploadError;
-    }
-  }
-
-  async function continueEncryptedUpload(
-    uploadFiles: File[],
-    knownSession: UploadSession,
-    offsets: Map<string, number>,
-    encryption: ClientEncryptionState,
-    generation: number,
-  ) {
-    const resumedPlaintext = knownSession.files.reduce((sum, serverFile, index) => {
-      return sum + plaintextProgressFromCiphertext(offsets.get(serverFile.id) ?? 0, uploadFiles[index].size);
-    }, 0);
-    updateProgress(resumedPlaintext);
-    let completedBefore = 0;
-    try {
-      for (let index = 0; index < uploadFiles.length; index += 1) {
-        if (generation !== uploadGenerationRef.current) return;
-        const file = uploadFiles[index];
-        const serverFile = knownSession.files[index];
-        setCurrentFileIndex(index);
-        let cipherOffset = offsets.get(serverFile.id) ?? 0;
-        let chunkIndex = chunkIndexFromCiphertextOffset(cipherOffset, file.size);
-        let plaintextOffset = Math.min(file.size, chunkIndex * PLAINTEXT_CHUNK_SIZE);
-        while (plaintextOffset < file.size) {
-          if (pausedRef.current || generation !== uploadGenerationRef.current) return;
-          const end = Math.min(plaintextOffset + PLAINTEXT_CHUNK_SIZE, file.size);
-          const plaintext = await file.slice(plaintextOffset, end).arrayBuffer();
-          const ciphertext = await encryptChunk(encryption.key, encryption.noncePrefixes[index], chunkIndex, plaintext);
-          if (pausedRef.current || generation !== uploadGenerationRef.current) return;
-          if (cipherOffset !== ciphertextOffsetForChunk(chunkIndex)) throw new Error(text.uploadFailed);
-          cipherOffset = await uploadChunk(
-            knownSession.id,
-            serverFile.id,
-            ciphertext,
-            cipherOffset,
-            completedBefore + plaintextOffset,
-            end - plaintextOffset,
-          );
-          plaintextOffset = end;
-          chunkIndex += 1;
-          updateProgress(completedBefore + plaintextOffset);
-        }
-        completedBefore += file.size;
-      }
-      if (generation !== uploadGenerationRef.current) return;
-      const completeResponse = await fetch(`/api/uploads/${knownSession.id}/complete`, { method: "POST" });
-      const payload = await completeResponse.json() as UploadResult & { error?: string };
-      if (generation !== uploadGenerationRef.current) return;
-      if (!completeResponse.ok || !payload.url) throw new Error(payload.error || text.uploadFailed);
+      const payload = await runEncryptedUpload({
+        files: uploadFiles,
+        session: knownSession,
+        encryption,
+        signal: controller.signal,
+        failureMessage: text.uploadFailed,
+        connectionMessage: text.connectionLost,
+        onProgress: (bytes) => { if (isCurrent()) updateProgress(bytes); },
+        onFile: (index) => { if (isCurrent()) setCurrentFileIndex(index); },
+        onRetry: (state) => {
+          if (!isCurrent()) return;
+          setRetrying(state);
+          if (state) {
+            setUploadSpeed(0);
+            speedSampleRef.current.value = 0;
+          }
+        },
+      });
+      if (!isCurrent()) return;
       setUploadedBytes(uploadFiles.reduce((sum, file) => sum + file.size, 0));
       setUploadSpeed(0);
       setResult({ ...payload, url: `${payload.url}#${encryption.fragment}`, managementUrl: managementUrl(payload.url, payload.id, encryption.managementToken) });
@@ -667,19 +397,37 @@ export function TransferPanel({ language }: { language: Language }) {
       encryptionRef.current = null;
       uploadingRef.current = false;
       setUploading(false);
+      setPaused(false);
+      setRetrying(null);
     } catch (uploadError) {
-      if (generation !== uploadGenerationRef.current) return;
-      if (uploadError instanceof DOMException && uploadError.name === "AbortError" && pausedRef.current) return;
+      if (!isCurrent()) return;
+      if (uploadError instanceof UploadUnavailableError) {
+        clearUploadRecovery();
+        setRecovery(null);
+        sessionRef.current = null;
+        encryptionRef.current = null;
+        uploadingRef.current = false;
+        pausedRef.current = false;
+        setUploading(false);
+        setPaused(false);
+        setUploadedBytes(0);
+        setUploadSpeed(0);
+        setRetrying(null);
+        setError(text.recoveryUnavailable);
+        return;
+      }
       throw uploadError;
     }
   }
 
   function pauseUpload() {
+    if (!sessionRef.current) return;
     uploadGenerationRef.current += 1;
     pausedRef.current = true;
     setPaused(true);
     setUploadSpeed(0);
-    requestRef.current?.abort();
+    controllerRef.current?.abort();
+    setRetrying(null);
   }
 
   function resumeUpload() {
@@ -688,7 +436,7 @@ export function TransferPanel({ language }: { language: Language }) {
     setPaused(false);
     setError("");
     speedSampleRef.current = { time: monotonicTimestamp(), bytes: uploadedBytes, value: 0 };
-    const generation = ++uploadGenerationRef.current;
+    const generation = beginUploadAttempt();
     void continueUpload(files, sessionRef.current, generation).catch((uploadError) => {
       if (generation !== uploadGenerationRef.current) return;
       if (sessionRef.current) {
@@ -705,17 +453,38 @@ export function TransferPanel({ language }: { language: Language }) {
   }
 
   async function cancelUpload() {
-    if (cancellingUploadRef.current) return;
+    if (cancellingUploadRef.current || !window.confirm(text.cancelConfirmation)) return;
     cancellingUploadRef.current = true;
     setCancellingUpload(true);
+    setStartingUpload(false);
     uploadGenerationRef.current += 1;
     pausedRef.current = true;
-    requestRef.current?.abort();
-    const session = sessionRef.current;
+    controllerRef.current?.abort();
+    setRetrying(null);
+    const session = sessionRef.current ?? recovery?.session;
+    const managementToken = encryptionRef.current?.managementToken ?? recovery?.managementToken;
+    setPaused(true);
+    setUploadSpeed(0);
+    if (session) {
+      try {
+        await deleteCancelledUpload(session.id, managementToken);
+      } catch {
+        setError(text.cancelFailed);
+        if (!encryptionRef.current && recovery) {
+          uploadingRef.current = false;
+          pausedRef.current = false;
+          setUploading(false);
+          setPaused(false);
+        }
+        cancellingUploadRef.current = false;
+        setCancellingUpload(false);
+        return;
+      }
+    }
     clearUploadRecovery();
+    setRecovery(null);
     sessionRef.current = null;
     encryptionRef.current = null;
-    if (session) await fetch(`/api/uploads/${session.id}`, { method: "DELETE" }).catch(() => undefined);
     uploadingRef.current = false;
     setUploading(false);
     setPaused(false);
@@ -746,9 +515,8 @@ export function TransferPanel({ language }: { language: Language }) {
     }
 
     const wasPaused = pausedRef.current;
-    const generation = ++uploadGenerationRef.current;
+    const generation = beginUploadAttempt();
     pausedRef.current = true;
-    requestRef.current?.abort();
     setPaused(true);
     setUploadSpeed(0);
     setRemovingFileKey(fileKey(selectedFile));
@@ -767,17 +535,21 @@ export function TransferPanel({ language }: { language: Language }) {
           noncePrefix: encodeNoncePrefix(remainingNoncePrefixes[fileIndex]),
         })),
       });
+      if (generation !== uploadGenerationRef.current) return;
       const response = await fetch(`/api/uploads/${session.id}/${serverFile.id}`, {
         method: "DELETE",
+        signal: AbortSignal.any([controllerRef.current!.signal, AbortSignal.timeout(15_000)]),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ encryption: { version: 1, metadata: encryptedMetadata } }),
       });
       const updated = await response.json() as UploadSession & { error?: string };
+      if (generation !== uploadGenerationRef.current) return;
       if (!response.ok || !updated.id || updated.files.length !== remainingFiles.length) {
         throw new Error(updated.error || text.removeFileFailed);
       }
 
       const nextEncryption = { ...encryption, noncePrefixes: remainingNoncePrefixes };
+      nextEncryption.pendingChunks.delete(serverFile.id);
       sessionRef.current = updated;
       encryptionRef.current = nextEncryption;
       setFiles(remainingFiles);
@@ -804,6 +576,7 @@ export function TransferPanel({ language }: { language: Language }) {
         setError(uploadError instanceof Error ? uploadError.message : text.uploadFailed);
       });
     } catch (removeError) {
+      if (generation !== uploadGenerationRef.current) return;
       setRemovingFileKey(null);
       pausedRef.current = true;
       setPaused(true);
@@ -848,6 +621,9 @@ export function TransferPanel({ language }: { language: Language }) {
     sessionRef.current = null;
     encryptionRef.current = null;
     uploadGenerationRef.current += 1;
+    controllerRef.current?.abort();
+    setRetrying(null);
+    setStartingUpload(false);
     clearUploadRecovery();
     setError("");
   }
@@ -878,7 +654,7 @@ export function TransferPanel({ language }: { language: Language }) {
           {copied ? <Check size={18} /> : <Send size={18} />}
           {copied ? text.linkCopied : text.shareAction}
         </button>
-        <ShareExtras url={result.url} managementUrl={result.managementUrl} language={language} />
+        <ShareExtras url={result.url} managementUrl={result.managementUrl} expiresAt={result.expiresAt} language={language} />
         <div className="sendebude-footer-links">
           <a className="sendebude-data-link" href="/datenschutz"><ShieldCheck size={15} aria-hidden="true" /><span>{text.privacyTitle}</span></a>
           <a className="sendebude-data-link" href="/nutzungsbedingungen"><ScrollText size={15} aria-hidden="true" /><span>{text.termsTitle}</span></a>
@@ -896,8 +672,10 @@ export function TransferPanel({ language }: { language: Language }) {
           <p className="panel-kicker">{text.newTransferKicker}</p>
           <h2 id="transfer-title">{text.question}</h2>
         </div>
-        <div className="limit-pill">max. 5{"\u00a0"}GB</div>
+        <div className="limit-pill">max. 5{"\u00a0"}GiB</div>
       </div>
+
+      <p className="upload-limits">{text.limits}</p>
 
       {recovery && (
         <div className="upload-recovery" role="status">
@@ -906,8 +684,8 @@ export function TransferPanel({ language }: { language: Language }) {
             <span>{text.recoveryBody}</span>
           </div>
           <div className="upload-recovery-actions">
-            <button type="button" onClick={() => inputRef.current?.click()}>{text.recoveryChoose}</button>
-            <button type="button" onClick={() => void discardRecovery()}>{text.recoveryDiscard}</button>
+            <button type="button" disabled={uploading || cancellingUpload} onClick={() => inputRef.current?.click()}>{text.recoveryChoose}</button>
+            <button type="button" disabled={uploading || cancellingUpload} onClick={() => void discardRecovery()}>{text.recoveryDiscard}</button>
           </div>
         </div>
       )}
@@ -957,7 +735,7 @@ export function TransferPanel({ language }: { language: Language }) {
                   {uploading ? <><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</> : formatBytes(file.size)}
                 </span>
                 <span className="file-actions">
-                  <button type="button" disabled={Boolean(removingFileKey) || cancellingUpload || (uploading && totalProgress >= 100)} onClick={() => void removeFile(index)} aria-label={uploading ? text.removeUploadingFile(file.name) : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
+                  <button type="button" disabled={startingUpload || Boolean(removingFileKey) || cancellingUpload || (uploading && totalProgress >= 100)} onClick={() => void removeFile(index)} aria-label={uploading ? text.removeUploadingFile(file.name) : `${file.name} ${text.remove}`}><Trash2 size={16} /></button>
                 </span>
               </div>
             );
@@ -973,13 +751,14 @@ export function TransferPanel({ language }: { language: Language }) {
           </div>
           <div className="upload-progress-row">
             <progress max="100" value={totalProgress} aria-label={`${totalProgress} % ${text.uploaded}`} />
-            <button className="upload-pause-toggle" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload} title={paused ? text.resumeUpload : text.pauseUpload}>
+            <button className="upload-pause-toggle" type="button" disabled={startingUpload || Boolean(removingFileKey) || cancellingUpload} onClick={paused ? resumeUpload : pauseUpload} aria-label={paused ? text.resumeUpload : text.pauseUpload} title={paused ? text.resumeUpload : text.pauseUpload}>
               {paused ? <Play size={16} /> : <Pause size={16} />}
             </button>
             <button className="upload-cancel-all" type="button" disabled={Boolean(removingFileKey) || cancellingUpload} onClick={() => void cancelUpload()} aria-label={text.cancelUpload} title={text.cancelUpload}>
               <Trash2 size={16} />
             </button>
           </div>
+          {retrying && <p className="upload-retry-status" role="status">{text.retrying(retrying.attempt, retrying.maximum, Math.ceil(retrying.delayMs / 1000))}</p>}
           <div className="upload-summary-line upload-summary-details">
             <span>{uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : paused ? "—" : "…"}</span>
             <span>{formatBytes(remainingBytes)} {text.remaining}</span>

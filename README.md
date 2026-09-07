@@ -45,6 +45,10 @@ Der unverschlüsselte Upload-Endpunkt ist deaktiviert. Bereits vorhandene älter
 
 ## Wiederaufnahme von Uploads
 
+Kurze Verbindungsfehler bei Dateiabschnitten, Statusabfragen und Abschluss werden bis zu viermal automatisch wiederholt (1, 2, 4, 8 Sekunden Abstand; ein längeres `Retry-After` wird berücksichtigt). Nach einer unklaren Blockantwort wird zuerst der bestätigte Serveroffset abgefragt. Nur ein noch nicht gespeicherter Block wird mit denselben verschlüsselten Bytes erneut gesendet. Berechtigungs-, Ablauf-, Größen- und Speicherfehler sowie Wartezeiten über 60 Sekunden pausieren den Upload ohne weitere automatische Versuche. Pause, Einzeldatei-Abbruch und Gesamtabbruch stoppen auch laufende Wartezeiten.
+
+Ein unfertiger oder pausierter Upload aktiviert die browserseitige Warnung beim Verlassen der Seite. Der Browser bestimmt den Dialogtext und kann die Warnung insbesondere auf Mobilgeräten unterdrücken; sie ist kein Schutz vor beendetem Browserprozess oder ausgeschaltetem Gerät. Der Gesamtabbruch verlangt eine Bestätigung.
+
 Ein Upload kann pausiert und im selben Browser-Tab nach einem Neuladen fortgesetzt werden. Dafür speichert der Browser vorübergehend im `sessionStorage`:
 
 - Sitzungs-, Transfer- und Datei-IDs sowie Ablauf- und Größenangaben,
@@ -55,6 +59,12 @@ Ein Upload kann pausiert und im selben Browser-Tab nach einem Neuladen fortgeset
 Diese Angaben sind tablokal; Dateiname und Notiz liegen dort im Klartext. Die eigentlichen Dateiinhalte werden nicht im Browser-Speicher abgelegt. Zur Wiederaufnahme müssen dieselben lokalen Dateien erneut ausgewählt werden.
 
 Beim Verwerfen einer Wiederaufnahme löscht der Browser seine lokalen Angaben und versucht, den unvollständigen Upload sofort auf dem Server zu entfernen. Schlägt diese Anfrage beispielsweise wegen einer unterbrochenen Verbindung fehl, übernimmt die automatische Bereinigung die spätere Löschung.
+
+## Freigaben auf dem eigenen Gerät merken
+
+Nach einem erfolgreichen Upload lässt sich **diese einzelne Freigabe ausdrücklich merken**. Ohne diesen Klick wird keine lokale Freigabenliste angelegt. Höchstens fünf Einträge mit Freigabelink einschließlich Schlüssel, privatem Löschlink und Zeitangaben werden im `localStorage` dieses Browserprofils gespeichert – keine Dateien, Dateinamen oder Notizen. Es gibt kein Konto und keine Synchronisierung auf andere Geräte.
+
+Wer Zugriff auf das Browserprofil hat, kann die gemerkten Freigaben öffnen und löschen. Auf gemeinsam genutzten Geräten sollte diese Funktion deshalb nicht verwendet werden. Ablaufprüfung und Entfernung geschehen lokal beim Seitenbesuch und während die Seite geöffnet ist, nicht bei geschlossenem Browser. „Nur lokal entfernen“ entfernt ausschließlich den Listeneintrag; „Vom Server löschen …“ öffnet die bestehende private Löschseite mit separater Bestätigung. Die Liste führt keine Hintergrundabfragen der Freigaben aus; anderweitig gelöschte Freigaben können deshalb noch angezeigt werden.
 
 ## Grenzen des Modells
 
@@ -95,7 +105,16 @@ npm run build
 npm run test:browser
 ```
 
-Die Browser-Tests verwenden einen isolierten HTTPS-Testproxy und eigene kurzlebige Testdaten unter `work/`, niemals produktive Freigaben. Geprüft werden Upload und Verschlüsselung, QR-Inhalt einschließlich Fragment, Einzel- und ZIP-Downloads samt Dateiinhalten, Fehler/Wiederholung, Abbruch, schmale Ansichten und bestätigte Löschung. `TEST_BROWSERS=chromium,firefox npm run test:browser` beschränkt einen lokalen Lauf; nicht ausgeführte Browser sind damit nicht geprüft. WebKit unter Linux ersetzt keinen Test auf einem echten iPhone. Die 5-GiB-Grenze wird strukturell im ZIP64-Header geprüft, nicht durch einen vollständigen 5-GiB-Browserdownload.
+Die Browser-Tests verwenden einen isolierten HTTPS-Testproxy und eigene kurzlebige Testdaten unter `work/`, niemals produktive Freigaben. Geprüft werden Upload und Verschlüsselung, QR-Inhalt einschließlich Fragment, Einzel- und ZIP-Downloads samt Dateiinhalten, Fehler/Wiederholung, Abbruch, schmale Ansichten und bestätigte Löschung. `TEST_BROWSERS=chromium,firefox npm run test:browser` beschränkt einen lokalen Lauf; nicht ausgeführte Browser sind damit nicht geprüft. Playwright-WebKit ersetzt keinen Test auf einem echten iPhone. Der normale Lauf prüft die 5-GiB-Grenze nur strukturell im ZIP64-Header; ein tatsächlicher Großdateilauf muss separat aktiviert werden. Der Windows-WebKit-Port verwendet beim Einzel-Download den ASCII-Ersatznamen aus `Content-Disposition` (z. B. `Pr_fung.bin`); der Test prüft diesen explizit, während die ZIP-Einträge ihre UTF-8-Namen behalten müssen.
+
+Zusätzlich prüfen die normalen Browsertests einen künstlichen 503-Fehler, eine verlorene erfolgreiche Blockantwort, opt-in Speicherung und Tab-Synchronisierung sowie die Entfernung nach bestätigter Serverlöschung. Ein optionaler Großdateitest erzeugt eine echte Datei auf der Platte, lädt sie verschlüsselt hoch und prüft den Einzel- und ZIP-Download mit SHA-256 und einem unabhängigen Python-ZIP-Leser, jeweils mit begrenztem Prüfspeicher:
+
+```bash
+TEST_LARGE_FILE_MIB=1024 TEST_BROWSERS=chromium npm run test:browser
+# Bis einschließlich 5120 MiB (5 GiB); ausreichend freien Testplattenspeicher einplanen.
+```
+
+Ohne `TEST_LARGE_FILE_MIB` wird der zusätzliche Großdateitest ausdrücklich übersprungen. Eine browser- und gerätespezifische Freigabeprüfung steht in [docs/RELEASE-CHECKS.md](docs/RELEASE-CHECKS.md). Unter Windows können `TEST_PYTHON` und `TEST_OPENSSL` die ausführbaren Dateien explizit festlegen.
 
 ## Konfiguration
 
@@ -134,6 +153,8 @@ npm run cleanup
 ```
 
 Das Referenzdeployment startet die Bereinigung alle 15 Minuten mit bis zu 60 Sekunden Zufallsverzögerung. Bei gesundem Timer können abgelaufene Dateien daher noch rund 16 Minuten physisch vorhanden sein. Das Datenverzeichnis sollte von langlebigen Backups ausgeschlossen werden; andernfalls dürfen Backups die zugesagten Löschfristen nicht verlängern.
+
+Die private Verwaltung zeigt eine manuell aktualisierbare Momentaufnahme von freiem Speicher, noch reservierten Upload-Bytes, unvollständigen Uploads und dem letzten erfolgreichen geplanten Bereinigungslauf. Warnungen erscheinen nur dort, ohne externe Nachrichten. Unter 10 GiB freiem Speicher wird gewarnt; die Upload-Sicherheitsreserve bleibt 5 GiB. Der geplante Lauf schreibt mit `--scheduled` atomar eine reine Betriebsstatusdatei unter `shared/.operations/cleanup.json`. Fehlt sie, ist sie fehlerhaft oder liegt der letzte Erfolg mehr als 45 Minuten zurück, zeigt die Verwaltung eine Warnung. Manuelle Läufe, Trockenläufe und API-Bereinigungen zählen nicht als erfolgreicher Timerlauf. Beim Update auch `deploy/share-cleanup.service` übernehmen; ohne `--scheduled` bleibt der Status unbekannt. Eine nicht erreichbare Anwendung kann selbst keine Warnung anzeigen; eine externe Überwachung ist hier bewusst nicht eingerichtet.
 
 Domain, GitHub-Link, Impressum und Aussagen zum Hostingstandort beschreiben die öffentliche Instanz `sendebude.de`. Betreiber eines Forks müssen diese Angaben an ihren tatsächlichen Betrieb und den zugehörigen Quellcode anpassen.
 

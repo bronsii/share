@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { LanguageSwitch } from "@/app/language-switch";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import type { UiLanguage } from "@/lib/ui-language";
+import { browserRecentTransferStorage, forgetRecentTransfer, notifyRecentTransfersChanged } from "@/lib/recent-transfers";
 
 export function SenderManagement({ id, initialLanguage }: { id: string; initialLanguage: UiLanguage }) {
   const [language, changeLanguage] = useUiLanguage(initialLanguage);
@@ -33,6 +34,7 @@ export function SenderManagement({ id, initialLanguage }: { id: string; initialL
       if (response.status === 404) { setStatus("invalid"); return; }
       if (!response.ok) throw new Error(response.status === 429 ? (de ? "Zu viele Versuche. Bitte warte einige Minuten." : "Too many attempts. Please wait a few minutes.") : (de ? "Löschen fehlgeschlagen. Bitte versuche es erneut." : "Deletion failed. Please try again."));
       setStatus("deleted"); setToken(null);
+      if (forgetRecentTransfer(id, browserRecentTransferStorage(), window.location.origin)) notifyRecentTransfersChanged();
       window.history.replaceState(null, "", window.location.pathname);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : (de ? "Bitte prüfe deine Verbindung." : "Please check your connection."));

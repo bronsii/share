@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock3, Download, Eye, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
+import type { OperationsSummary } from "@/lib/operations-types";
+import operationsStyles from "./operations.module.css";
 
 type AdminTransfer = {
   folderName: string;
@@ -27,15 +29,59 @@ function formatBytes(bytes: number) {
 }
 
 function formatDate(value: string) {
+  if (!Number.isFinite(Date.parse(value))) return "unbekannt";
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function OperationsCard({ operations }: { operations: OperationsSummary | null }) {
+  if (!operations) return <p className={operationsStyles.warning} role="status">Der Betriebsstatus ist derzeit nicht verfügbar. Bitte aktualisiere die Ansicht.</p>;
+  const { storage, cleanup } = operations;
+  const cleanupWarnings = {
+    ok: "",
+    unknown: "Noch kein erfolgreicher planmäßiger Bereinigungslauf bestätigt. Bitte den Cleanup-Timer prüfen.",
+    stale: `Der letzte erfolgreiche planmäßige Bereinigungslauf liegt mehr als ${Math.round(cleanup.maxAgeMs / 60_000)} Minuten zurück. Bitte den Cleanup-Timer prüfen.`,
+    failed: "Der letzte planmäßige Bereinigungslauf ist fehlgeschlagen oder war unvollständig. Bitte das Service-Protokoll prüfen.",
+    unavailable: "Der Bereinigungsstatus ist nicht lesbar. Ein erfolgreicher Lauf kann nicht bestätigt werden.",
+  };
+  return (
+    <section className={operationsStyles.card} aria-labelledby="operations-heading">
+      <div className={operationsStyles.heading}>
+        <h2 id="operations-heading">Betriebsstatus</h2>
+        <span>Stand: {formatDate(operations.checkedAt)}</span>
+      </div>
+      {storage ? <>
+        <dl className={operationsStyles.metrics}>
+          <div><dt>Auf Datenträger frei</dt><dd>{formatBytes(storage.freeBytes)}</dd></div>
+          <div><dt>Für laufende Uploads reserviert</dt><dd>{formatBytes(storage.reservedUploadBytes)}</dd></div>
+          <div><dt>Für neue Uploads verfügbar</dt><dd>{storage.accountingWarnings ? "Nicht verlässlich" : formatBytes(storage.availableForUploadsBytes)}</dd></div>
+          <div><dt>Unvollständige Uploads</dt><dd>{storage.incompleteUploads}</dd></div>
+        </dl>
+        <p className={operationsStyles.note}>Reservierungen sind noch nicht belegter Speicher. Für neue Uploads werden sie und {formatBytes(storage.safetyReserveBytes)} Sicherheitsreserve vom freien Speicher abgezogen.</p>
+        {storage.accountingWarnings > 0 && <p className={operationsStyles.warning} role="status">Speichermetadaten sind teilweise unlesbar. Reservierte und verfügbare Kapazität sind möglicherweise unvollständig.</p>}
+        {storage.freeBytes < storage.safetyReserveBytes * 2 && <p className={operationsStyles.warning} role="status">Wenig freier Speicher: weniger als {formatBytes(storage.safetyReserveBytes * 2)} auf dem Datenträger verfügbar.</p>}
+        {storage.availableForUploadsBytes === 0 && <p className={operationsStyles.warning} role="status">Unter Berücksichtigung der Reservierungen ist kein Speicher für neue Uploads verfügbar.</p>}
+        {storage.incompleteUploads > 0 && <p className={operationsStyles.note}>Unvollständige Uploads können noch laufen oder fortgesetzt werden. Die Bereinigung entfernt sie erst nach mindestens zwei Stunden ohne Aktivität.</p>}
+      </> : <p className={operationsStyles.warning} role="status">Der Speicherstatus konnte nicht ermittelt werden. Die freie Kapazität ist unbekannt.</p>}
+      <div className={operationsStyles.cleanup}>
+        <strong>Planmäßige Bereinigung</strong>
+        <p className={operationsStyles.note}>Zuletzt erfolgreich: {cleanup.lastSuccessAt ? formatDate(cleanup.lastSuccessAt) : "noch nicht bestätigt"}</p>
+        {cleanup.lastAttemptStatus === "failure" && cleanup.lastAttemptAt && <p className={operationsStyles.note}>Letzter fehlgeschlagener Versuch: {formatDate(cleanup.lastAttemptAt)}</p>}
+        {cleanup.lastSuccessAt && cleanup.lastSuccessCounts && <p className={operationsStyles.note}>Beim letzten erfolgreichen Lauf entfernt: {cleanup.lastSuccessCounts.expired} abgelaufene Freigaben · {cleanup.lastSuccessCounts.incomplete} unvollständige Uploads</p>}
+        {cleanupWarnings[cleanup.status] && <p className={operationsStyles.warning} role="status">{cleanupWarnings[cleanup.status]}</p>}
+        <p className={operationsStyles.note}>Bestätigt nur planmäßige Läufe; manuelle Löschungen und Bereinigungen bei API-Anfragen zählen nicht. Hinweise werden ausschließlich hier angezeigt. Die Aktualisieren-Schaltfläche lädt den aktuellen Stand.</p>
+      </div>
+    </section>
+  );
 }
 
 export function AdminPanel() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [code, setCode] = useState("");
   const [transfers, setTransfers] = useState<AdminTransfer[]>([]);
+  const [operations, setOperations] = useState<OperationsSummary | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState("");
   const codeInput = useRef<HTMLInputElement | null>(null);
 
@@ -49,20 +95,26 @@ export function AdminPanel() {
   }, []);
 
   const loadTransfers = useCallback(async () => {
-    const response = await fetch("/api/admin/transfers", { cache: "no-store" });
+    const response = await fetch("/api/admin/transfers", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
     if (response.status === 401) {
       setAuthenticated(false);
+      setTransfers([]);
+      setOperations(null);
       return;
     }
     if (!response.ok) throw new Error("Die Uploads konnten nicht geladen werden.");
-    const data = await response.json() as { transfers: AdminTransfer[] };
+    const data = await response.json() as { transfers: AdminTransfer[]; operations: OperationsSummary };
     setTransfers(data.transfers);
+    setOperations(data.operations);
     setAuthenticated(true);
   }, []);
 
   useEffect(() => {
-    fetch("/api/admin/session", { cache: "no-store" })
-      .then((response) => response.json())
+    fetch("/api/admin/session", { cache: "no-store", signal: AbortSignal.timeout(15_000) })
+      .then((response) => {
+        if (!response.ok) throw new Error("Session check failed");
+        return response.json();
+      })
       .then((data: { authenticated: boolean }) => data.authenticated ? loadTransfers() : setAuthenticated(false))
       .catch(() => {
         setAuthenticated(false);
@@ -79,22 +131,28 @@ export function AdminPanel() {
     if (busy || code.length < 4) return;
     setBusy(true);
     setError("");
-    const response = await fetch("/api/admin/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-    const data = await response.json().catch(() => ({})) as { error?: string };
-    if (!response.ok) {
-      setError(data.error ?? "Anmeldung fehlgeschlagen.");
+    try {
+      const response = await fetch("/api/admin/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setError(data.error ?? "Anmeldung fehlgeschlagen.");
+        setCode("");
+        return;
+      }
       setCode("");
+      await loadTransfers();
+    } catch {
+      setError("Anmeldung oder Laden fehlgeschlagen. Bitte prüfe die Passphrase und versuche es erneut.");
+      setCode("");
+    } finally {
       setBusy(false);
       focusCodeInput();
-      return;
     }
-    setCode("");
-    await loadTransfers().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Laden fehlgeschlagen."));
-    setBusy(false);
   }
 
   function updateCode(rawValue: string) {
@@ -104,9 +162,33 @@ export function AdminPanel() {
   }
 
   async function logout() {
-    await fetch("/api/admin/session", { method: "DELETE" });
-    setAuthenticated(false);
-    setTransfers([]);
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/session", { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) throw new Error("Logout failed");
+      setAuthenticated(false);
+      setTransfers([]);
+      setOperations(null);
+    } catch {
+      setError("Abmelden fehlgeschlagen. Bitte versuche es erneut; die Sitzung ist möglicherweise noch aktiv.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setError("");
+    try {
+      await loadTransfers();
+    } catch {
+      setError("Aktualisieren fehlgeschlagen. Die angezeigten Daten sind möglicherweise veraltet.");
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function deleteTransfer(transfer: AdminTransfer) {
@@ -114,14 +196,22 @@ export function AdminPanel() {
     if (!window.confirm(`„${label}“ wirklich endgültig löschen?`)) return;
     setDeleting(transfer.folderName);
     setError("");
-    const response = await fetch(`/api/admin/transfers/${encodeURIComponent(transfer.folderName)}`, { method: "DELETE" });
-    if (response.ok) {
+    try {
+      const response = await fetch(`/api/admin/transfers/${encodeURIComponent(transfer.folderName)}`, { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+      if (response.status === 401) {
+        setAuthenticated(false);
+        setTransfers([]);
+        setOperations(null);
+        return;
+      }
+      if (!response.ok) throw new Error("Deletion failed");
       setTransfers((current) => current.filter((item) => item.folderName !== transfer.folderName));
-    } else {
-      const data = await response.json().catch(() => ({})) as { error?: string };
-      setError(data.error ?? "Löschen fehlgeschlagen.");
+      await loadTransfers();
+    } catch {
+      setError("Löschen oder Aktualisieren fehlgeschlagen. Bitte aktualisiere die Ansicht, um den aktuellen Stand zu prüfen.");
+    } finally {
+      setDeleting("");
     }
-    setDeleting("");
   }
 
   if (authenticated === null) {
@@ -171,11 +261,12 @@ export function AdminPanel() {
           <p>{transfers.length} Freigaben · {formatBytes(totalSize)} belegt</p>
         </div>
         <div className="admin-actions">
-          <button type="button" onClick={() => void loadTransfers()} aria-label="Liste aktualisieren"><RefreshCw size={17} /></button>
-          <button type="button" onClick={() => void logout()} aria-label="Abmelden"><LogOut size={17} /></button>
+          <button type="button" onClick={() => void refresh()} disabled={refreshing || busy || Boolean(deleting)} aria-label="Liste und Betriebsstatus aktualisieren"><RefreshCw className={refreshing ? "admin-spin" : undefined} size={17} /></button>
+          <button type="button" onClick={() => void logout()} disabled={busy || refreshing || Boolean(deleting)} aria-label="Abmelden"><LogOut size={17} /></button>
         </div>
       </div>
       {error && <p className="admin-error" role="alert">{error}</p>}
+      <OperationsCard operations={operations} />
       {transfers.length === 0 ? (
         <div className="admin-empty"><File size={24} /><strong>Der Speicher ist leer.</strong><span>Es sind keine Uploads vorhanden.</span></div>
       ) : (
@@ -206,7 +297,7 @@ export function AdminPanel() {
                   </span>}
                   <span><Clock3 size={14} />{transfer.expiresAt ? `gültig bis ${formatDate(transfer.expiresAt)}` : "kein Ablaufdatum"}</span>
                 </div>
-                <button type="button" onClick={() => void deleteTransfer(transfer)} disabled={deleting === transfer.folderName}>
+                <button type="button" onClick={() => void deleteTransfer(transfer)} disabled={Boolean(deleting) || refreshing || busy}>
                   <Trash2 size={16} />{deleting === transfer.folderName ? "Lösche …" : "Freigabe löschen"}
                 </button>
               </div>

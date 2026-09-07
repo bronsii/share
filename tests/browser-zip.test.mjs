@@ -15,7 +15,8 @@ test("Browser ZIP64 has correct CRC, UTF-8 names, entry sizes and an independent
   for await (const chunk of browserZip(entries)) chunks.push(chunk);
   const zip = Buffer.concat(chunks);
   assert.equal(zip.length, browserZipSize(entries));
-  const result = spawnSync("python3", ["-c", "import io,sys,zipfile; z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())); assert z.namelist()==['Äpfel.txt','leer.txt']; assert z.read('Äpfel.txt')==b'123456789'; assert z.read('leer.txt')==b''; assert z.testzip() is None"], { input: zip });
+  const result = spawnSync(process.env.TEST_PYTHON ?? (process.platform === "win32" ? "python" : "python3"), ["-c", "import io,sys,zipfile; z=zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())); assert z.namelist()==['Äpfel.txt','leer.txt']; assert z.read('Äpfel.txt')==b'123456789'; assert z.read('leer.txt')==b''; assert z.testzip() is None"], { input: zip });
+  assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr.toString());
 });
 

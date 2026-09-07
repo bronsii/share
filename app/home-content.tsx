@@ -6,6 +6,7 @@ import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { LanguageSwitch } from "./language-switch";
 import { TransferPanel } from "./transfer-panel";
+import { RecentTransfers } from "./recent-transfers";
 
 const heroCopy = {
   de: {
@@ -93,6 +94,7 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
           <TransferPanel language={language} />
           {renderFeatures("mobile")}
         </div>
+        <RecentTransfers language={language} />
       </section>
       <a className="admin-lock-link" href="/verwaltung" aria-label={text.adminLabel} title={language === "de" ? "Verwaltung" : "Administration"}>
         <LockKeyhole size={14} />

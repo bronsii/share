@@ -517,6 +517,8 @@ Port 3000 darf ausschließlich auf `127.0.0.1` lauschen. Die drei dauerhaft lauf
 
 ### Cleanup und Protokolle
 
+Die aktuelle `share-cleanup.service` ruft das Skript mit `--scheduled` auf. Dieses Flag schreibt den letzten geplanten Erfolg bzw. Fehler atomar nach `SHARED_ROOT/.operations/cleanup.json`; es ist kein zusätzlicher Löschmodus. Beim Update die Unit ebenfalls installieren und `systemctl daemon-reload` ausführen. Vor dem ersten erfolgreichen Timerlauf meldet die Verwaltung „unbekannt“, bei über 45 Minuten ohne Erfolg „überfällig“. Ein normaler manueller Lauf oder `--dry-run` ersetzt den Timer-Nachweis nicht. Betriebswarnungen werden ausschließlich in der privaten Verwaltung angezeigt; es werden keine externen Benachrichtigungen verschickt.
+
 `share-cleanup.service` ist eine kurz laufende `oneshot`-Unit und nach erfolgreichem Abschluss normalerweise wieder `inactive`. Entscheidend sind Ergebnis und Exitcode:
 
 ```bash
