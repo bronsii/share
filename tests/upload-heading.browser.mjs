@@ -14,7 +14,7 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     await page.waitForLoadState("networkidle");
     for (const width of [320, 390, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const [language, label] of [["EN", "max. 20 files · 5 GiB"], ["DE", "max. 20 Dateien · 5 GiB"]]) {
+      for (const [language, label] of [["EN", "max. 20 files · 5 GB"], ["DE", "max. 20 Dateien · 5 GB"]]) {
         await page.getByRole("button", { name: language, exact: true }).click();
         await expect(page.locator(".limit-pill")).toHaveText(label);
         await expect(page.locator(".upload-limits")).toHaveCount(0);

@@ -22,7 +22,7 @@ const termsCopy = {
       },
       service: {
         title: "Leistungsumfang",
-        body: "Du kannst ohne Registrierung bis zu 20 Dateien mit insgesamt höchstens 5 GiB für 1, 3 oder 7 Tage bereitstellen. Die Laufzeit beginnt mit dem Start des Uploads. Unvollständige Uploads werden nach zwei Stunden ohne Dateiaktivität automatisch bereinigt und können danach nicht fortgesetzt werden. Dateien, Dateinamen und eine optionale Notiz werden im Browser verschlüsselt. Mit dem Ablauf endet der Zugriff; eine regelmäßige Löschroutine entfernt die verschlüsselten Daten kurz danach. Sendebude bietet keine Wiederherstellung an und ist kein dauerhafter Speicher- oder Sicherungsdienst; bewahre deine Originaldateien selbst auf.",
+        body: "Du kannst ohne Registrierung bis zu 20 Dateien mit insgesamt höchstens 5 GB für 1, 3 oder 7 Tage bereitstellen. Die Laufzeit beginnt mit dem Start des Uploads. Unvollständige Uploads werden nach zwei Stunden ohne Dateiaktivität automatisch bereinigt und können danach nicht fortgesetzt werden. Dateien, Dateinamen und eine optionale Notiz werden im Browser verschlüsselt. Mit dem Ablauf endet der Zugriff; eine regelmäßige Löschroutine entfernt die verschlüsselten Daten kurz danach. Sendebude bietet keine Wiederherstellung an und ist kein dauerhafter Speicher- oder Sicherungsdienst; bewahre deine Originaldateien selbst auf.",
       },
       responsibility: {
         title: "Deine Verantwortung und erforderliche Rechte",
@@ -106,7 +106,7 @@ const termsCopy = {
       },
       service: {
         title: "Service scope",
-        body: "Without registering, you can provide up to 20 files with a combined size of no more than 5 GiB for 1, 3 or 7 days. The lifetime begins when the upload starts. Incomplete uploads are cleaned up automatically after two hours without file activity and cannot then be resumed. Files, file names and an optional note are encrypted in the browser. Access ends on expiry; a recurring cleanup removes the encrypted data shortly afterwards. Sendebude does not provide recovery and is not a permanent storage or backup service; you must retain your original files.",
+        body: "Without registering, you can provide up to 20 files with a combined size of no more than 5 GB for 1, 3 or 7 days. The lifetime begins when the upload starts. Incomplete uploads are cleaned up automatically after two hours without file activity and cannot then be resumed. Files, file names and an optional note are encrypted in the browser. Access ends on expiry; a recurring cleanup removes the encrypted data shortly afterwards. Sendebude does not provide recovery and is not a permanent storage or backup service; you must retain your original files.",
       },
       responsibility: {
         title: "Your responsibility and required rights",
