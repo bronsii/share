@@ -104,6 +104,13 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     ]);
     await page.getByRole("checkbox").check();
     await expect(page.getByText("Prüfung.bin", { exact: true })).toBeVisible();
+    let releaseCompletion;
+    const completionGate = new Promise((resolve) => { releaseCompletion = resolve; });
+    context.after(() => releaseCompletion());
+    await page.route("**/api/uploads/*/complete", async (route) => {
+      await completionGate;
+      await route.continue();
+    });
     await page.getByRole("button", { name: "Hochladen & Link erstellen", exact: true }).click();
     await expect(page.locator(".upload-retry-status")).toBeVisible();
     assert.equal(await page.evaluate(() => {
@@ -111,6 +118,19 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
       window.dispatchEvent(event);
       return event.defaultPrevented;
     }), true, "An unfinished upload must install the close warning");
+    await expect(page.locator(".upload-summary .upload-speed")).toHaveText(/\d.*\/s/u, { timeout: 20_000 });
+    await expect(page.locator(".upload-speed")).toHaveCount(1);
+    await expect(page.locator(".file-speed")).toHaveCount(0);
+    await expect(page.locator(".file-progress")).toHaveCount(2);
+    await expect(page.locator(".file-actions button")).toHaveCount(2);
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      assert.equal(await page.locator(".file-row").first().evaluate((row) => getComputedStyle(row).gridTemplateColumns.split(" ").length), width === 390 ? 4 : 5);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    }
+    await expect(page.locator(".upload-pause-toggle")).toBeVisible();
+    await expect(page.locator(".upload-cancel-all")).toBeVisible();
+    releaseCompletion();
     await expect(page.locator(".share-link")).toBeVisible({ timeout: 20_000 });
     assert.equal(rejectChunk, false);
     assert.equal(loseChunkResponse, false);
@@ -247,6 +267,7 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     assert.equal((await refreshed).status(), 200, "Refreshing after a network interruption must succeed");
     // Next's persistent route announcer also has role=alert; inspect the admin error only.
     await expect(page.locator(".admin-error")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Abmelden", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Abmelden", exact: true }).press("Enter");
     await expect(page.getByLabel("Admin-Passphrase", { exact: true })).toBeVisible();
     assert.deepEqual(errors, []);

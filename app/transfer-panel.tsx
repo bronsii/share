@@ -93,7 +93,6 @@ export function TransferPanel({ language }: { language: Language }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [uploadedBytes, setUploadedBytes] = useState(0);
   const [uploadSpeed, setUploadSpeed] = useState(0);
   const [error, setError] = useState("");
@@ -209,7 +208,6 @@ export function TransferPanel({ language }: { language: Language }) {
     setUploading(true);
     setPaused(false);
     setFiles(orderedFiles);
-    setCurrentFileIndex(0);
     setUploadedBytes(0);
     setUploadSpeed(0);
     setError("");
@@ -266,7 +264,6 @@ export function TransferPanel({ language }: { language: Language }) {
     setStartingUpload(true);
     setUploading(true);
     setPaused(false);
-    setCurrentFileIndex(0);
     setUploadedBytes(0);
     setUploadSpeed(0);
     speedSampleRef.current = { time: monotonicTimestamp(), bytes: 0, value: 0 };
@@ -377,7 +374,6 @@ export function TransferPanel({ language }: { language: Language }) {
         failureMessage: text.uploadFailed,
         connectionMessage: text.connectionLost,
         onProgress: (bytes) => { if (isCurrent()) updateProgress(bytes); },
-        onFile: (index) => { if (isCurrent()) setCurrentFileIndex(index); },
         onRetry: (state) => {
           if (!isCurrent()) return;
           setRetrying(state);
@@ -553,7 +549,6 @@ export function TransferPanel({ language }: { language: Language }) {
       sessionRef.current = updated;
       encryptionRef.current = nextEncryption;
       setFiles(remainingFiles);
-      setCurrentFileIndex(Math.min(index, remainingFiles.length - 1));
       const resumedBytes = updated.files.reduce((sum, serverFile, fileIndex) => {
         return sum + plaintextProgressFromCiphertext(serverFile.uploaded, remainingFiles[fileIndex].size);
       }, 0);
@@ -718,15 +713,11 @@ export function TransferPanel({ language }: { language: Language }) {
           {files.map((file, index) => {
             const fileUploadedBytes = uploadedBytesForFile(index);
             const fileProgress = file.size ? Math.min(100, Math.round((fileUploadedBytes / file.size) * 100)) : 100;
-            const isCurrentUpload = uploading && index === currentFileIndex;
             return (
               <div className="file-row" key={fileKey(file)}>
                 <span className="file-glyph" aria-hidden="true"><FileGlyph name={file.name} type={file.type} size={19} /></span>
                 <span className="file-name" title={file.name}>{file.name}</span>
                 <span className="file-progress" aria-label={uploading ? `${fileProgress}% ${text.uploaded}` : undefined}>{uploading ? `${fileProgress}%` : ""}</span>
-                <span className="file-speed" aria-label={isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)} ${text.perSecond}` : undefined}>
-                  {isCurrentUpload && uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : ""}
-                </span>
                 <span className="file-size">
                   {uploading ? <><strong>{formatBytes(fileUploadedBytes)}</strong> / {formatBytes(file.size)}</> : formatBytes(file.size)}
                 </span>
@@ -756,7 +747,7 @@ export function TransferPanel({ language }: { language: Language }) {
           </div>
           {retrying && <p className="upload-retry-status" role="status">{text.retrying(retrying.attempt, retrying.maximum, Math.ceil(retrying.delayMs / 1000))}</p>}
           <div className="upload-summary-line upload-summary-details">
-            <span>{uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : paused ? "—" : "…"}</span>
+            <span className="upload-speed" aria-label={uploadSpeed > 0 ? `${formatBytes(uploadSpeed)} ${text.perSecond}` : undefined}>{uploadSpeed > 0 ? `${formatBytes(uploadSpeed)}/s` : paused ? "—" : "…"}</span>
             <span>{formatBytes(remainingBytes)} {text.remaining}</span>
             <span>{text.timeRemaining}: {formatDuration(remainingSeconds, language)}</span>
           </div>

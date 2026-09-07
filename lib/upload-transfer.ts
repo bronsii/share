@@ -27,7 +27,6 @@ type UploadOptions = {
   failureMessage: string;
   connectionMessage: string;
   onProgress: (bytes: number) => void;
-  onFile: (index: number) => void;
   onRetry: (state: UploadRetryState | null) => void;
 };
 
@@ -46,7 +45,7 @@ function validatedOffsets(status: UploadStatus, session: UploadSession, files: F
 
 /** Own the chunk/network lifecycle; React owns only the visible transfer state. */
 export async function runEncryptedUpload(options: UploadOptions): Promise<UploadResult> {
-  const { files, session, encryption, signal, failureMessage, connectionMessage, onProgress, onFile, onRetry } = options;
+  const { files, session, encryption, signal, failureMessage, connectionMessage, onProgress, onRetry } = options;
   const retry = { signal, onRetry };
   const statusUrl = `/api/uploads/${session.id}`;
   const readOffsets = async () => validatedOffsets(
@@ -82,7 +81,6 @@ export async function runEncryptedUpload(options: UploadOptions): Promise<Upload
     signal.throwIfAborted();
     const file = files[index];
     const serverFile = session.files[index];
-    onFile(index);
     let cipherOffset = offsets.get(serverFile.id)!;
     let chunkIndex = chunkIndexFromCiphertextOffset(cipherOffset, file.size);
     let plaintextOffset = Math.min(file.size, chunkIndex * PLAINTEXT_CHUNK_SIZE);

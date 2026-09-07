@@ -52,7 +52,7 @@ async function uploadFixture(t, onSend) {
   const progress = [];
   return {
     file, encryption, state, controller, progress,
-    options: { files: [file], session, encryption, signal: controller.signal, failureMessage: "Failed", connectionMessage: "Offline", onProgress: (bytes) => progress.push(bytes), onFile: () => {}, onRetry: () => {} },
+    options: { files: [file], session, encryption, signal: controller.signal, failureMessage: "Failed", connectionMessage: "Offline", onProgress: (bytes) => progress.push(bytes), onRetry: () => {} },
   };
 }
 
