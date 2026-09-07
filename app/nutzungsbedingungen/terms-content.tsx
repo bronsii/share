@@ -12,7 +12,7 @@ const termsCopy = {
     back: "Zurück zu Sendebude",
     languageLabel: "Sprache wählen",
     kicker: "Regeln für eine faire Nutzung",
-    title: "Nutzungsbedingungen",
+    title: <>Nutzungs<wbr />bedingungen</>,
     intro: "Diese Bedingungen regeln die kostenlose Nutzung von Sendebude. Bitte lies sie vor dem Hochladen aufmerksam durch.",
     effective: "Stand",
     sections: {
