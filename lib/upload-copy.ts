@@ -1,7 +1,7 @@
 export const uploadTranslations = {
   de: {
     tooManyFiles: (maximum: number) => `Du kannst höchstens ${maximum} Dateien auf einmal teilen.`,
-    limits: "Bis zu 20 Dateien · insgesamt 5 GiB",
+    limits: "max. 20 Dateien · 5\u00a0GiB",
     retrying: (attempt: number, maximum: number, seconds: number) => `Verbindung unterbrochen. Neuer Versuch ${attempt}/${maximum} in ${seconds} Sek. …`,
     cancelConfirmation: "Gesamten Upload abbrechen? Bereits übertragene Daten werden nach Möglichkeit sofort gelöscht, andernfalls automatisch bereinigt. Bei einem Fehler bleibt der Upload pausiert, damit du das Löschen erneut versuchen kannst.",
     cancelFailed: "Das sofortige Löschen konnte nicht bestätigt werden. Der Upload bleibt pausiert. Bitte versuche den Abbruch erneut; andernfalls greift die automatische Bereinigung bzw. das Ablaufdatum.",
@@ -66,7 +66,7 @@ export const uploadTranslations = {
   },
   en: {
     tooManyFiles: (maximum: number) => `You can share up to ${maximum} files at once.`,
-    limits: "Up to 20 files · 5 GiB total",
+    limits: "max. 20 files · 5\u00a0GiB",
     retrying: (attempt: number, maximum: number, seconds: number) => `Connection interrupted. Retry ${attempt}/${maximum} in ${seconds} sec …`,
     cancelConfirmation: "Cancel the entire upload? Uploaded data will be deleted immediately where possible, otherwise automatically cleaned up. If deletion fails, the upload stays paused so you can retry deleting it.",
     cancelFailed: "Immediate deletion could not be confirmed. The upload remains paused. Please try cancelling again; otherwise automatic cleanup or the expiry date applies.",

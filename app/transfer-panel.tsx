@@ -668,14 +668,10 @@ export function TransferPanel({ language }: { language: Language }) {
   return (
     <section className="transfer-card" aria-labelledby="transfer-title">
       <div className="card-heading">
-        <div>
-          <p className="panel-kicker">{text.newTransferKicker}</p>
-          <h2 id="transfer-title">{text.question}</h2>
-        </div>
-        <div className="limit-pill">max. 5{"\u00a0"}GiB</div>
+        <p className="panel-kicker">{text.newTransferKicker}</p>
+        <div className="limit-pill">{text.limits}</div>
+        <h2 id="transfer-title">{text.question}</h2>
       </div>
-
-      <p className="upload-limits">{text.limits}</p>
 
       {recovery && (
         <div className="upload-recovery" role="status">
