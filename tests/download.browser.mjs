@@ -239,11 +239,17 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     // Also verify that recovery can be operated from the keyboard.
     const retry = await downloadAndRead(() => page.getByRole("button", { name: "Erneut versuchen", exact: true }).press("Enter"));
     assert.deepEqual(retry.bytes, binary);
+    await expect(page.locator(".download-status-done")).toBeVisible();
     const downloadGate = { url: `/api/transfers/${id}/${manifest.files[0].id}`, requested: false, aborted: false, destroy: () => {} };
     heldDownload = downloadGate;
     context.after(() => downloadGate.destroy());
     await prepareDownloadInteraction();
-    await downloadButton.click();
+    // Firefox can still swallow a pointer click as its native save UI settles.
+    // Give post-retry actions explicit keyboard focus; file/ZIP pointer actions
+    // are covered above, and Chromium/WebKit also cover pointer cancellation.
+    await expect(downloadButton).toBeEnabled();
+    if (name === "firefox") await downloadButton.press("Enter");
+    else await downloadButton.click();
     await expect.poll(async () => ({
       requested: downloadGate.requested,
       phase: await page.locator(".download-status").getAttribute("class"),
@@ -252,7 +258,10 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
       phase: "download-status download-status-downloading",
     });
     await expect(page.locator(".download-status-downloading")).toBeVisible();
-    await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
+    const cancelButton = page.getByRole("button", { name: "Abbrechen", exact: true });
+    await expect(cancelButton).toBeEnabled();
+    if (name === "firefox") await cancelButton.press("Enter");
+    else await cancelButton.click();
     await expect(page.locator(".download-status-cancelled")).toBeVisible();
     await expect.poll(() => downloadGate.aborted, { message: "Cancellation must close the pending encrypted response without completing it" }).toBe(true);
     downloadGate.destroy();
