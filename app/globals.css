@@ -741,6 +741,7 @@ a { color: inherit; text-decoration: none; }
 
 /* Keep icons compact, but reserve non-overlapping finger-sized controls. */
 @media (max-width: 620px), (any-pointer: coarse) {
+  .settings-row select, .settings-row textarea { font-size: 16px; }
   .language-switch button { min-width: 44px; height: 44px; }
   .admin-lock-link { width: 44px; height: 44px; }
   .file-list { max-height: 164px; }

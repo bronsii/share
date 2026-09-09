@@ -2,10 +2,11 @@
 
 import { LockKeyhole, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { useRef } from "react";
 import type { UiLanguage } from "@/lib/ui-language";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { LanguageSwitch } from "./language-switch";
-import { TransferPanel } from "./transfer-panel";
+import { TransferPanel, type TransferPanelHandle } from "./transfer-panel";
 import { RecentTransfers } from "./recent-transfers";
 
 const heroCopy = {
@@ -53,6 +54,7 @@ const heroCopy = {
 
 export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }) {
   const [language, changeLanguage] = useUiLanguage(initialLanguage);
+  const transferPanelRef = useRef<TransferPanelHandle>(null);
   const text = heroCopy[language];
   const renderFeatures = (placement: "primary" | "mobile") => (
     <ul className={`hero-features hero-features-${placement}`}>
@@ -74,7 +76,10 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
     <main>
       <section className="hero-shell compact-hero">
         <header className="site-header">
-          <Link className="site-domain" href="/" aria-label={text.homeLabel}>
+          <Link className="site-domain" href="/" aria-label={text.homeLabel} onNavigate={(event) => {
+            event.preventDefault();
+            void transferPanelRef.current?.startNewTransfer();
+          }}>
             <span className="site-domain-mark"><ShieldCheck size={15} aria-hidden="true" /></span>
             <span>sendebude.de</span>
           </Link>
@@ -91,7 +96,7 @@ export function HomeContent({ initialLanguage }: { initialLanguage: UiLanguage }
             <p className="hero-lead">{text.lead}</p>
             {renderFeatures("primary")}
           </div>
-          <TransferPanel language={language} />
+          <TransferPanel ref={transferPanelRef} language={language} />
           {renderFeatures("mobile")}
         </div>
         <RecentTransfers language={language} />

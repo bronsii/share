@@ -14,7 +14,7 @@ import {
   Trash2,
   UploadCloud,
 } from "lucide-react";
-import { ChangeEvent, DragEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, KeyboardEvent, type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   createNoncePrefix,
   createTransferKey,
@@ -75,7 +75,9 @@ function completedUploadFileCount(files: File[], uploadedBytes: number) {
   return completed;
 }
 
-export function TransferPanel({ language }: { language: Language }) {
+export type TransferPanelHandle = { startNewTransfer: () => Promise<void> };
+
+export function TransferPanel({ language, ref }: { language: Language; ref?: Ref<TransferPanelHandle> }) {
   const text = uploadTranslations[language];
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
@@ -449,7 +451,7 @@ export function TransferPanel({ language }: { language: Language }) {
   }
 
   async function cancelUpload() {
-    if (cancellingUploadRef.current || !window.confirm(text.cancelConfirmation)) return;
+    if (cancellingUploadRef.current || !window.confirm(text.cancelConfirmation)) return false;
     cancellingUploadRef.current = true;
     setCancellingUpload(true);
     setStartingUpload(false);
@@ -474,7 +476,7 @@ export function TransferPanel({ language }: { language: Language }) {
         }
         cancellingUploadRef.current = false;
         setCancellingUpload(false);
-        return;
+        return false;
       }
     }
     clearUploadRecovery();
@@ -491,6 +493,7 @@ export function TransferPanel({ language }: { language: Language }) {
     setError("");
     cancellingUploadRef.current = false;
     setCancellingUpload(false);
+    return true;
   }
 
   async function removeFile(index: number) {
@@ -603,14 +606,28 @@ export function TransferPanel({ language }: { language: Language }) {
     await copyLink();
   }
 
+  async function startNewTransfer() {
+    if (cancellingUploadRef.current || removingFileKey) return;
+    // Reuse confirmed server cleanup for active, paused and recovered uploads.
+    // Completed shares are left intact; only the form is reset.
+    if ((uploadingRef.current || recovery) && !await cancelUpload()) return;
+    reset();
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }
+
   function reset() {
     setFiles([]);
+    setDays("3");
     setMessage("");
     setAcceptedTermsLanguage(null);
     setResult(null);
     setCopied(false);
     setUploadedBytes(0);
     setUploadSpeed(0);
+    setUploading(false);
+    setPaused(false);
+    setRecovery(null);
+    setDragging(false);
     uploadingRef.current = false;
     pausedRef.current = false;
     sessionRef.current = null;
@@ -622,6 +639,8 @@ export function TransferPanel({ language }: { language: Language }) {
     clearUploadRecovery();
     setError("");
   }
+
+  useImperativeHandle(ref, () => ({ startNewTransfer }));
 
   if (result) {
     return (
@@ -655,7 +674,7 @@ export function TransferPanel({ language }: { language: Language }) {
           <a className="sendebude-data-link" href="/nutzungsbedingungen"><ScrollText size={15} aria-hidden="true" /><span>{text.termsTitle}</span></a>
           <a className="sendebude-data-link" href="/impressum"><FileText size={15} aria-hidden="true" /><span>{text.imprintTitle}</span></a>
         </div>
-        <button className="text-button" type="button" onClick={reset}>{text.newTransfer}</button>
+        <button className="text-button" type="button" onClick={() => void startNewTransfer()}>{text.newTransfer}</button>
       </section>
     );
   }

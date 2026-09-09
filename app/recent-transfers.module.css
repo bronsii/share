@@ -1,4 +1,4 @@
-.section { max-width: 1120px; margin: 0 auto 52px; padding: 26px; border: 1px solid var(--line); border-radius: 19px; background: #fffaf5; }
+.section { max-width: 1120px; margin: 48px auto 52px; padding: 26px; border: 1px solid var(--line); border-radius: 19px; background: #fffaf5; }
 .header, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .header { justify-content: space-between; }
 .header h2 { display: inline-flex; align-items: center; gap: 9px; margin: 0; font-size: 17px; line-height: 1.4; }
@@ -30,7 +30,7 @@
 .copyFallback input { display: block; width: 100%; min-width: 0; margin-top: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: #fffaf5; color: var(--ink); font-size: 11px; }
 @media (max-width: 1200px) { .section { margin-left: 5vw; margin-right: 5vw; } }
 @media (max-width: 600px) {
-  .section { padding: 18px; margin-top: 12px; margin-bottom: 30px; }
+  .section { padding: 18px; margin-top: 32px; margin-bottom: 30px; }
   .header { align-items: flex-start; gap: 6px; }
   .header h2 { font-size: 15px; }
   .entry { padding: 12px; }
