@@ -18,7 +18,7 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     const proxySecret = randomBytes(32).toString("hex");
     const server = await startNextTestServer(context, { env: { SHARED_ROOT: root, SHARE_PROXY_SECRET: proxySecret }, cleanup: () => rm(root, { recursive: true, force: true }) });
     const requests = [];
-    let slow = false;
+    let heldDownload = null;
     let rejectChunk = true;
     let loseChunkResponse = true;
     let failAdminRefresh = false;
@@ -44,6 +44,11 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
         res.end(JSON.stringify({ error: "Temporary test interruption" }));
         return;
       }
+      const downloadGate = req.method === "GET" && req.url === heldDownload?.url ? heldDownload : null;
+      if (downloadGate) {
+        downloadGate.requested = true;
+        res.once("close", () => { downloadGate.aborted = !res.writableEnded; });
+      }
       const upstream = httpRequest(new URL(req.url, server.baseUrl), {
         method: req.method,
         headers: { ...req.headers, "x-share-proxy-secret": proxySecret, "x-share-client-ip": "203.0.113.90", "x-forwarded-host": req.headers.host, "x-forwarded-proto": "https" },
@@ -60,8 +65,15 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
           }
         }
         res.writeHead(response.statusCode, response.headers);
-        if (slow && /^\/api\/transfers\/[^/]+\/[a-f0-9]{32}$/u.test(req.url)) {
-          const timeout = setTimeout(() => response.pipe(res), 3_000);
+        if (downloadGate) {
+          // Keep a real encrypted fetch pending until the user cancels it.
+          // A fixed delay can expire before a busy CI browser reaches Abbrechen.
+          downloadGate.destroy = () => response.destroy();
+        } else if (req.method === "PUT" && Number(req.headers["x-upload-offset"]) > 0) {
+          // After the lost acknowledgement, loopback can finish the remaining bytes
+          // inside the speed meter's one-second sampling window. Pace this successful
+          // acknowledgement so actual byte progress spans a fresh measurement window.
+          const timeout = setTimeout(() => response.pipe(res), 1_250);
           res.on("close", () => clearTimeout(timeout));
         } else response.pipe(res);
       });
@@ -181,10 +193,16 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     await navigate(shareUrl);
     await expect(page.getByText("Prüfung.bin", { exact: true })).toBeVisible();
     const downloadButton = page.getByRole("button", { name: "Prüfung.bin sicher herunterladen", exact: true });
-    async function downloadAndRead(action) {
+    async function prepareDownloadInteraction() {
       // Firefox's native download popover can consume the next synthetic pointer click.
       // Dismiss browser chrome; do not change any page state or download protection.
-      if (name === "firefox") await page.keyboard.press("Escape");
+      if (name === "firefox") {
+        await page.bringToFront();
+        await page.keyboard.press("Escape");
+      }
+    }
+    async function downloadAndRead(action) {
+      await prepareDownloadInteraction();
       const pending = page.waitForEvent("download");
       await action();
       const download = await pending.catch(async (failure) => { throw new Error(`${failure.message}; UI: ${await page.locator(".download-status").textContent({ timeout: 500 }).catch(() => "status missing")}`); });
@@ -213,6 +231,7 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     const ciphertext = await readFile(cipherPath);
     const corrupt = Buffer.from(ciphertext); corrupt[20] ^= 1;
     await writeFile(cipherPath, corrupt);
+    await prepareDownloadInteraction();
     await downloadButton.click();
     await expect(page.locator(".download-status-failed")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole("button", { name: "Erneut versuchen", exact: true })).toBeVisible();
@@ -220,12 +239,24 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     // Also verify that recovery can be operated from the keyboard.
     const retry = await downloadAndRead(() => page.getByRole("button", { name: "Erneut versuchen", exact: true }).press("Enter"));
     assert.deepEqual(retry.bytes, binary);
-    slow = true;
+    const downloadGate = { url: `/api/transfers/${id}/${manifest.files[0].id}`, requested: false, aborted: false, destroy: () => {} };
+    heldDownload = downloadGate;
+    context.after(() => downloadGate.destroy());
+    await prepareDownloadInteraction();
     await downloadButton.click();
+    await expect.poll(async () => ({
+      requested: downloadGate.requested,
+      phase: await page.locator(".download-status").getAttribute("class"),
+    }), { timeout: 20_000, message: "A real encrypted GET must be in flight before cancellation" }).toEqual({
+      requested: true,
+      phase: "download-status download-status-downloading",
+    });
     await expect(page.locator(".download-status-downloading")).toBeVisible();
     await page.getByRole("button", { name: "Abbrechen", exact: true }).click();
     await expect(page.locator(".download-status-cancelled")).toBeVisible();
-    slow = false;
+    await expect.poll(() => downloadGate.aborted, { message: "Cancellation must close the pending encrypted response without completing it" }).toBe(true);
+    downloadGate.destroy();
+    heldDownload = null;
     assert.equal(requests.some((url) => url.includes(managementToken) || url.includes(new URL(shareUrl).hash.slice(1))), false);
 
     await navigate(new URL(shareUrl).pathname);
