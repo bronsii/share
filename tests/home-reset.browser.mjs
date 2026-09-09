@@ -252,6 +252,8 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,webkit").split(",").m
 
     for (const profile of [
       { label: "desktop", width: 1280, height: 900, touch: false },
+      { label: "wide desktop", width: 1600, height: 1000, touch: false },
+      { label: "portrait tablet", width: 768, height: 1024, touch: true },
       { label: "narrow fine pointer", width: 390, height: 844, touch: false },
       { label: "portrait touch", width: 390, height: 844, touch: true },
       { label: "landscape touch", width: 844, height: 390, touch: true },
@@ -267,10 +269,14 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,webkit").split(",").m
         const layout = await page.evaluate((selector) => {
           const section = document.querySelector(selector);
           const grid = document.querySelector(".hero-grid");
+          const sectionRect = section.getBoundingClientRect();
+          const gridRect = grid.getBoundingClientRect();
           return {
             coarse: matchMedia("(any-pointer: coarse)").matches,
             fonts: [...document.querySelectorAll(".settings-row select, .settings-row textarea")].map((element) => parseFloat(getComputedStyle(element).fontSize)),
-            gap: section.getBoundingClientRect().top - grid.getBoundingClientRect().bottom,
+            gap: sectionRect.top - gridRect.bottom,
+            leftOffset: sectionRect.left - document.querySelector(".transfer-card").getBoundingClientRect().left,
+            rightWithinGrid: sectionRect.right >= gridRect.left - 1 && sectionRect.right <= gridRect.right + 1,
             margin: parseFloat(getComputedStyle(section).marginTop),
             viewport: document.querySelector('meta[name="viewport"]')?.content ?? "",
             overflow: document.documentElement.scrollWidth > innerWidth,
@@ -284,6 +290,8 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,webkit").split(",").m
         const expectedGap = profile.width <= 600 ? 32 : 48;
         assert.equal(layout.margin, expectedGap);
         assert.ok(Math.abs(layout.gap - expectedGap) < 1, `Expected a physical ${expectedGap}px gap below the hero grid, got ${layout.gap}px`);
+        assert.ok(Math.abs(layout.leftOffset) <= 1, `Saved section must align with the upload card; offset is ${layout.leftOffset}px`);
+        assert.equal(layout.rightWithinGrid, true, "Saved section's right edge stays within the hero grid");
         const viewport = Object.fromEntries(layout.viewport.toLowerCase().split(",").map((part) => part.trim().split("=").map((value) => value.trim())));
         assert.ok(!["no", "0"].includes(viewport["user-scalable"]), "Pinch zoom must not be disabled");
         assert.ok(viewport["maximum-scale"] === undefined || Number(viewport["maximum-scale"]) > 1, "Viewport must permit zooming in");
