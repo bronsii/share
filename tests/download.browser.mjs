@@ -94,6 +94,16 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
     // Use the site's own reduced-motion support for deterministic interactions.
     const browserContext = await browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true, acceptDownloads: true, reducedMotion: "reduce", locale: "de-DE", viewport: { width: 1440, height: 1000 } });
     const page = await browserContext.newPage();
+    let uploadNetwork;
+    if (name === "chromium") {
+      // Pace the actual request body, not just its acknowledgement: Chromium may
+      // coalesce progress events on loopback, leaving no positive post-retry sample.
+      // This only affects this test page's upload requests, not downloads or the UI.
+      uploadNetwork = await browserContext.newCDPSession(page);
+      await uploadNetwork.send("Network.emulateNetworkConditionsByRule", {
+        matchedNetworkConditions: [{ urlPattern: `${baseUrl}/api/uploads/*`, latency: 0, downloadThroughput: -1, uploadThroughput: 512 * 1024 }],
+      });
+    }
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     async function navigate(url) {
@@ -124,13 +134,18 @@ for (const name of (process.env.TEST_BROWSERS ?? "chromium,firefox,webkit").spli
       await route.continue();
     });
     await page.getByRole("button", { name: "Hochladen & Link erstellen", exact: true }).click();
-    await expect(page.locator(".upload-retry-status")).toBeVisible();
+    // The paced first 4-MiB request needs about eight seconds before its rejection.
+    await expect(page.locator(".upload-retry-status")).toBeVisible({ timeout: 20_000 });
     assert.equal(await page.evaluate(() => {
       const event = new Event("beforeunload", { cancelable: true });
       window.dispatchEvent(event);
       return event.defaultPrevented;
     }), true, "An unfinished upload must install the close warning");
     await expect(page.locator(".upload-summary .upload-speed")).toHaveText(/\d.*\/s/u, { timeout: 20_000 });
+    if (uploadNetwork) {
+      await uploadNetwork.send("Network.emulateNetworkConditionsByRule", { matchedNetworkConditions: [] });
+      await uploadNetwork.detach();
+    }
     await expect(page.locator(".upload-speed")).toHaveCount(1);
     await expect(page.locator(".file-speed")).toHaveCount(0);
     await expect(page.locator(".file-progress")).toHaveCount(2);
