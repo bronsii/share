@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock3, Download, Eye, File, LockKeyhole, LogOut, RefreshCw, Trash2 } from "lucide-react";
+import { ACCESS_LOCATION_KEY_PATTERN } from "@/lib/access-location-key";
 import type { OperationsSummary } from "@/lib/operations-types";
 import operationsStyles from "./operations.module.css";
 
@@ -18,6 +19,9 @@ type AdminTransfer = {
   totalSize: number;
   viewCount: number;
   downloadCount: number;
+  downloadLocations: Record<string, number>;
+  downloadLocationLastAt: Record<string, string>;
+  downloadLocationsLimited: boolean;
 };
 
 const statusText = { active: "Aktiv", expired: "Abgelaufen", incomplete: "Unvollständig" } as const;
@@ -31,6 +35,64 @@ function formatBytes(bytes: number) {
 function formatDate(value: string) {
   if (!Number.isFinite(Date.parse(value))) return "unbekannt";
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatDownloadDateTime(value: string | undefined) {
+  if (!value || !Number.isFinite(Date.parse(value))) return null;
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+const GERMAN_REGION_NAMES: Record<string, string> = {
+  BW: "Baden-Württemberg",
+  BY: "Bayern",
+  BE: "Berlin",
+  BB: "Brandenburg",
+  HB: "Bremen",
+  HH: "Hamburg",
+  HE: "Hessen",
+  MV: "Mecklenburg-Vorpommern",
+  NI: "Niedersachsen",
+  NW: "Nordrhein-Westfalen",
+  RP: "Rheinland-Pfalz",
+  SL: "Saarland",
+  SN: "Sachsen",
+  ST: "Sachsen-Anhalt",
+  SH: "Schleswig-Holstein",
+  TH: "Thüringen",
+};
+
+function locationName(key: string) {
+  const match = /^([A-Z]{2})(?:-([A-Z0-9]{1,3}))?$/u.exec(key);
+  if (!match) return null;
+  const [, country, region] = match;
+  if (country === "DE" && region && GERMAN_REGION_NAMES[region]) {
+    return `${GERMAN_REGION_NAMES[region]}, DE`;
+  }
+  return region ? `${region}, ${country}` : country;
+}
+
+function downloadLocationSummary(transfer: AdminTransfer) {
+  const summaries = Object.entries(transfer.downloadLocations ?? {})
+    .filter(([key, count]) => ACCESS_LOCATION_KEY_PATTERN.test(key) && Number.isSafeInteger(count) && count > 0)
+    .sort(([, countA], [, countB]) => countB - countA)
+    .map(([key, count]) => {
+      const label = locationName(key);
+      if (!label) return null;
+      const lastAt = formatDownloadDateTime(transfer.downloadLocationLastAt?.[key]);
+      return `${label} (${count}×) · ${lastAt ? `zuletzt ${lastAt} Uhr` : "Zeitpunkt bisher nicht erfasst"}`;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+  if (transfer.downloadLocationsLimited) {
+    summaries.push("Weitere Gebiete wurden nicht einzeln erfasst.");
+  }
+  return summaries.join("\n");
 }
 
 function OperationsCard({ operations }: { operations: OperationsSummary | null }) {
@@ -271,38 +333,58 @@ export function AdminPanel() {
         <div className="admin-empty"><File size={24} /><strong>Der Speicher ist leer.</strong><span>Es sind keine Uploads vorhanden.</span></div>
       ) : (
         <div className="admin-transfer-list">
-          {transfers.map((transfer) => (
-            <article className="admin-transfer" key={transfer.folderName}>
-              <div className="admin-transfer-head">
-                <div>
-                  <span className={`admin-status is-${transfer.status}`}>{statusText[transfer.status]}</span>
-                  <span className="admin-created">erstellt {formatDate(transfer.createdAt)}</span>
-                </div>
-                <strong>{formatBytes(transfer.totalSize)}</strong>
-              </div>
-              <div className="admin-files">
-                {transfer.files.length ? transfer.files.map((file, index) => (
-                  <div className="admin-file" key={file.id ?? `${file.name}-${index}`}>
-                    <File size={16} />
-                    <span title={file.name}>{file.name}</span>
-                    <small>{formatBytes(file.size)}</small>
+          {transfers.map((transfer) => {
+            const locationSummary = downloadLocationSummary(transfer);
+            const locationHint = transfer.downloadCount > 0
+              ? (locationSummary || "Ort nicht bestimmbar")
+              : "Noch keine Downloads";
+            const downloadTooltip = transfer.downloadCount > 0
+              ? `Grobe Herkunft und letzter Download:\n${locationHint}`
+              : undefined;
+            return (
+              <article className="admin-transfer" key={transfer.folderName}>
+                <div className="admin-transfer-head">
+                  <div>
+                    <span className={`admin-status is-${transfer.status}`}>{statusText[transfer.status]}</span>
+                    <span className="admin-created">erstellt {formatDate(transfer.createdAt)}</span>
                   </div>
-                )) : <div className="admin-file admin-file-empty">Keine Datei im Ordner</div>}
-              </div>
-              <div className="admin-transfer-foot">
-                <div className="admin-transfer-info">
-                  {transfer.id && <span className="admin-transfer-stats">
-                    <Eye size={14} />{transfer.viewCount > 0 ? `Link geöffnet: Ja (${transfer.viewCount}×)` : "Link geöffnet: Nein"}
-                    <Download size={14} />Downloads: {transfer.downloadCount}
-                  </span>}
-                  <span><Clock3 size={14} />{transfer.expiresAt ? `gültig bis ${formatDate(transfer.expiresAt)}` : "kein Ablaufdatum"}</span>
+                  <strong>{formatBytes(transfer.totalSize)}</strong>
                 </div>
-                <button type="button" onClick={() => void deleteTransfer(transfer)} disabled={Boolean(deleting) || refreshing || busy}>
-                  <Trash2 size={16} />{deleting === transfer.folderName ? "Lösche …" : "Freigabe löschen"}
-                </button>
-              </div>
-            </article>
-          ))}
+                <div className="admin-files">
+                  {transfer.files.length ? transfer.files.map((file, index) => (
+                    <div className="admin-file" key={file.id ?? `${file.name}-${index}`}>
+                      <File size={16} />
+                      <span title={file.name}>{file.name}</span>
+                      <small>{formatBytes(file.size)}</small>
+                    </div>
+                  )) : <div className="admin-file admin-file-empty">Keine Datei im Ordner</div>}
+                </div>
+                <div className="admin-transfer-foot">
+                  <div className="admin-transfer-info">
+                    {transfer.id && <span className="admin-transfer-stats">
+                      <span className="admin-view-count">
+                        <Eye size={14} />
+                        <span>{transfer.viewCount > 0 ? `Link geöffnet: Ja (${transfer.viewCount}×)` : "Link geöffnet: Nein"}</span>
+                      </span>
+                      <span
+                        className="admin-download-origin"
+                        tabIndex={transfer.downloadCount > 0 ? 0 : undefined}
+                        data-tooltip={downloadTooltip}
+                        aria-label={`Downloads: ${transfer.downloadCount}. ${locationHint}`}
+                      >
+                        <Download size={14} />
+                        <span>Downloads: {transfer.downloadCount}</span>
+                      </span>
+                    </span>}
+                    <span><Clock3 size={14} />{transfer.expiresAt ? `gültig bis ${formatDate(transfer.expiresAt)}` : "kein Ablaufdatum"}</span>
+                  </div>
+                  <button type="button" onClick={() => void deleteTransfer(transfer)} disabled={Boolean(deleting) || refreshing || busy}>
+                    <Trash2 size={16} />{deleting === transfer.folderName ? "Lösche …" : "Freigabe löschen"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

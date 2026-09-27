@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // The GeoIP database stays in node_modules and is loaded only by server routes.
+  serverExternalPackages: ["geoip-lite"],
   async headers() {
     return [
       {

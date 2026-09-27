@@ -10,6 +10,7 @@ import { sanitizeFileName } from "@/lib/file-name.mjs";
 import { cleanupTransfersAtRoot, INCOMPLETE_UPLOAD_MAX_IDLE_MS } from "@/lib/storage-cleanup.mjs";
 import { readStorageSummary } from "@/lib/operations-storage.mjs";
 import { readCleanupSummary } from "@/lib/operations-state.mjs";
+import { ACCESS_LOCATION_KEY_PATTERN, type AccessLocationKey } from "@/lib/access-location-key";
 
 export type TransferFile = {
   id: string;
@@ -31,6 +32,12 @@ export type TransferManifest = {
   termsAcceptance?: { version: string; language: "de" | "en"; acceptedAt: string };
   views?: number;
   downloads?: number;
+  /** Deliberately coarse country/subdivision counters for the admin tooltip. */
+  downloadLocations?: Partial<Record<AccessLocationKey, number>>;
+  /** Latest accepted download start per coarse location, rounded down to one minute. */
+  downloadLocationLastAt?: Partial<Record<AccessLocationKey, string>>;
+  /** True once another location could not be retained within the bounded manifest. */
+  downloadLocationsLimited?: boolean;
   managementTokenHash?: string;
 };
 
@@ -49,6 +56,9 @@ export type AdminTransfer = {
   totalSize: number;
   viewCount: number;
   downloadCount: number;
+  downloadLocations: Record<AccessLocationKey, number>;
+  downloadLocationLastAt: Record<AccessLocationKey, string>;
+  downloadLocationsLimited: boolean;
 };
 
 const SHARED_ROOT = process.env.SHARED_ROOT ?? path.join(process.cwd(), "shared");
@@ -58,6 +68,7 @@ const FILE_ID_PATTERN = /^(?:[a-f0-9]{20}|[a-f0-9]{32})$/;
 const STORAGE_RESERVE_BYTES = 5 * 1024 ** 3;
 const STORAGE_RESERVATION_PATTERN = /^[a-f0-9]{32}$/;
 const STORAGE_RESERVATION_MAX_IDLE_MS = INCOMPLETE_UPLOAD_MAX_IDLE_MS;
+const MAX_DOWNLOAD_LOCATION_BUCKETS = 128;
 
 const transferStatUpdates = new Map<string, Promise<boolean>>();
 const globalStorageState = globalThis as typeof globalThis & {
@@ -501,7 +512,40 @@ async function writeTransferManifest(manifest: TransferManifest) {
   }
 }
 
-export async function incrementTransferStat(id: string, statName: "views" | "downloads") {
+function normalizedDownloadLocations(value: unknown): Record<AccessLocationKey, number> {
+  const locations: Record<AccessLocationKey, number> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return locations;
+  for (const [key, count] of Object.entries(value)) {
+    if (Object.keys(locations).length >= MAX_DOWNLOAD_LOCATION_BUCKETS) break;
+    if (ACCESS_LOCATION_KEY_PATTERN.test(key)
+      && typeof count === "number" && Number.isSafeInteger(count) && count >= 0) {
+      locations[key] = count;
+    }
+  }
+  return locations;
+}
+
+function normalizedDownloadLocationLastAt(
+  value: unknown,
+  locations: Record<AccessLocationKey, number>,
+): Record<AccessLocationKey, string> {
+  const timestamps: Record<AccessLocationKey, string> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return timestamps;
+  for (const [key, timestamp] of Object.entries(value)) {
+    if (Object.keys(timestamps).length >= MAX_DOWNLOAD_LOCATION_BUCKETS) break;
+    if (!Object.hasOwn(locations, key) || typeof timestamp !== "string" || timestamp.length > 40) continue;
+    const parsedTimestamp = Date.parse(timestamp);
+    if (Number.isFinite(parsedTimestamp)) timestamps[key] = new Date(parsedTimestamp).toISOString();
+  }
+  return timestamps;
+}
+
+function currentMinuteTimestamp() {
+  const now = Date.now();
+  return new Date(now - (now % 60_000)).toISOString();
+}
+
+export async function incrementTransferStat(id: string, statName: "views" | "downloads", location?: AccessLocationKey | null) {
   const idMatch = TRANSFER_ID_PATTERN.exec(id);
   if (!idMatch) return false;
   const folderName = idMatch[1];
@@ -512,6 +556,19 @@ export async function incrementTransferStat(id: string, statName: "views" | "dow
       const manifest = JSON.parse(await readFile(finalManifestPath, "utf8")) as TransferManifest;
       if (manifest.id !== id || transferIsExpired(manifest)) return false;
       manifest[statName] = Math.max(0, Number(manifest[statName]) || 0) + 1;
+      if (statName === "downloads" && location && ACCESS_LOCATION_KEY_PATTERN.test(location)) {
+        const locations = normalizedDownloadLocations(manifest.downloadLocations);
+        if (Object.hasOwn(locations, location) || Object.keys(locations).length < MAX_DOWNLOAD_LOCATION_BUCKETS) {
+          const current = locations[location] ?? 0;
+          locations[location] = current < Number.MAX_SAFE_INTEGER ? current + 1 : Number.MAX_SAFE_INTEGER;
+          const timestamps = normalizedDownloadLocationLastAt(manifest.downloadLocationLastAt, locations);
+          timestamps[location] = currentMinuteTimestamp();
+          manifest.downloadLocations = locations;
+          manifest.downloadLocationLastAt = timestamps;
+        } else {
+          manifest.downloadLocationsLimited = true;
+        }
+      }
       const temporaryManifestPath = `${finalManifestPath}.${crypto.randomUUID()}.tmp`;
       try {
         await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), {
@@ -574,6 +631,7 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
         }
       }));
       const expired = complete && transferIsExpired(metadata);
+      const downloadLocations = complete ? normalizedDownloadLocations(metadata.downloadLocations) : {};
       return {
         folderName,
         id: complete ? metadata.id : null,
@@ -584,6 +642,11 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
         totalSize: files.reduce((sum, file) => sum + file.size, 0),
         viewCount: complete ? Math.max(0, Number(metadata.views) || 0) : 0,
         downloadCount: complete ? Math.max(0, Number(metadata.downloads) || 0) : 0,
+        downloadLocations,
+        downloadLocationLastAt: complete
+          ? normalizedDownloadLocationLastAt(metadata.downloadLocationLastAt, downloadLocations)
+          : {},
+        downloadLocationsLimited: complete && metadata.downloadLocationsLimited === true,
       };
     }
 
@@ -605,6 +668,9 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
       totalSize: files.reduce((sum, file) => sum + file.size, 0),
       viewCount: 0,
       downloadCount: 0,
+      downloadLocations: {},
+      downloadLocationLastAt: {},
+      downloadLocationsLimited: false,
     };
   } catch (error) {
     if (isMissingPathError(error)) return null;

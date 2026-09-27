@@ -28,6 +28,8 @@ Download: Chiffretext <- HTTPS <- Sendebude; Entschlüsselung im Browser -> loka
 
 Der Server erhält den Schlüssel im URL-Fragment nicht. Er liefert jedoch die Webanwendung aus und bleibt damit Teil des Vertrauensmodells.
 
+Die private Verwaltung zeigt bei der Download-Zahl jeder Freigabe per Mouseover eine grobe geografische Zuordnung (Bundesland, soweit die Datenbank es liefert, sonst Land), den Zähler sowie Datum und Uhrzeit des letzten Download-Starts. Die vertrauenswürdig übermittelte Client-IP wird nur während der Anfrage lokal nachgeschlagen; für höchstens 128 Gebiete landen im Manifest ausschließlich ISO-Länder-/Regionscodes, Zähler und der auf eine Minute gerundete letzte Download-Startzeitpunkt je Gebiet. Beim Erreichen der Grenze weist die Verwaltung darauf hin. Diese Angaben werden mit der Freigabe gelöscht. VPNs, Mobilfunknetze und IPv6 können die Zuordnung ungenau machen. Es werden keine IP-Adressen, Cookies, User-Agents oder vollständigen Referrer-URLs persistiert. Dafür wird `geoip-lite` mit [GeoLite2-Daten von MaxMind](https://www.maxmind.com/) verwendet; die GeoLite2-Daten stehen unter CC BY-SA 4.0.
+
 ## Sicherheitsmodell
 
 Neue Übertragungen verwenden das versionierte Format `v1`:
@@ -80,7 +82,7 @@ Sichere Deployments, eine restriktive CSP, kontrollierte Abhängigkeiten und una
 
 ## Lokale Entwicklung
 
-Voraussetzung ist Node.js `>=22.13.0`.
+Voraussetzung ist Node.js `>=24.0.0`.
 
 ```bash
 npm ci

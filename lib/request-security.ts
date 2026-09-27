@@ -126,6 +126,14 @@ function clientAddress(request: Request) {
   return failProxyConfiguration("Der Reverse Proxy hat keine gültige Client-IP übermittelt.");
 }
 
+/**
+ * Returns the proxy-validated client address for an in-memory lookup only.
+ * Callers must never persist or expose the returned value.
+ */
+export function transientClientAddress(request: Request) {
+  return clientAddress(request);
+}
+
 function lastForwardedValue(value: string | null) {
   return value?.split(",").map((part) => part.trim()).filter(Boolean).at(-1);
 }
