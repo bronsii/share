@@ -4,7 +4,7 @@
   "license": "AGPL-3.0-only",
   "private": true,
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "dev": "next dev",
@@ -20,15 +20,16 @@
     "check": "npm run lint && npm run typecheck && npm test && npm run test:integration"
   },
   "dependencies": {
+    "geoip-lite": "2.0.3",
     "lucide-react": "^1.29.0",
-    "next": "16.3.0",
+    "next": "16.3.6",
     "qrcode": "^1.5.4",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
-    "@next/eslint-plugin-next": "16.3.0",
+    "@next/eslint-plugin-next": "16.3.6",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
