@@ -370,6 +370,7 @@ export function AdminPanel() {
                         className="admin-download-origin"
                         tabIndex={transfer.downloadCount > 0 ? 0 : undefined}
                         data-tooltip={downloadTooltip}
+                        title={downloadTooltip}
                         aria-label={`Downloads: ${transfer.downloadCount}. ${locationHint}`}
                       >
                         <Download size={14} />
