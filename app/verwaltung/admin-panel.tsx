@@ -14,7 +14,7 @@ type AdminTransfer = {
   createdAt: string;
   expiresAt: string | null;
   status: "active" | "expired" | "incomplete";
-  files: Array<{ id: string | null; name: string; size: number }>;
+  files: Array<{ id: string | null; name: string; size: number; downloadCount: number }>;
   totalSize: number;
   viewCount: number;
   downloadCount: number;
@@ -285,7 +285,7 @@ export function AdminPanel() {
                   <div className="admin-file" key={file.id ?? `${file.name}-${index}`}>
                     <File size={16} />
                     <span title={file.name}>{file.name}</span>
-                    <small>{formatBytes(file.size)}</small>
+                    <small>{formatBytes(file.size)} · {file.downloadCount} {file.downloadCount === 1 ? "Download" : "Downloads"}</small>
                   </div>
                 )) : <div className="admin-file admin-file-empty">Keine Datei im Ordner</div>}
               </div>

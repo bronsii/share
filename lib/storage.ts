@@ -18,6 +18,7 @@ export type TransferFile = {
   size: number;
   type: string;
   plaintextSize?: number;
+  downloads?: number;
 };
 
 export type TransferManifest = {
@@ -45,7 +46,7 @@ export type AdminTransfer = {
   createdAt: string;
   expiresAt: string | null;
   status: "active" | "expired" | "incomplete";
-  files: Array<{ id: string | null; name: string; size: number }>;
+  files: Array<{ id: string | null; name: string; size: number; downloadCount: number }>;
   totalSize: number;
   viewCount: number;
   downloadCount: number;
@@ -501,7 +502,11 @@ async function writeTransferManifest(manifest: TransferManifest) {
   }
 }
 
-export async function incrementTransferStat(id: string, statName: "views" | "downloads") {
+export async function incrementTransferStat(
+  id: string,
+  statName: "views" | "downloads",
+  downloadedFileIds: readonly string[] = [],
+) {
   const idMatch = TRANSFER_ID_PATTERN.exec(id);
   if (!idMatch) return false;
   const folderName = idMatch[1];
@@ -512,6 +517,12 @@ export async function incrementTransferStat(id: string, statName: "views" | "dow
       const manifest = JSON.parse(await readFile(finalManifestPath, "utf8")) as TransferManifest;
       if (manifest.id !== id || transferIsExpired(manifest)) return false;
       manifest[statName] = Math.max(0, Number(manifest[statName]) || 0) + 1;
+      if (statName === "downloads" && downloadedFileIds.length > 0) {
+        const downloadedFiles = new Set(downloadedFileIds);
+        manifest.files = manifest.files.map((file) => downloadedFiles.has(file.id)
+          ? { ...file, downloads: Math.max(0, Number(file.downloads) || 0) + 1 }
+          : file);
+      }
       const temporaryManifestPath = `${finalManifestPath}.${crypto.randomUUID()}.tmp`;
       try {
         await writeFile(temporaryManifestPath, JSON.stringify(manifest, null, 2), {
@@ -568,9 +579,19 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
     if (metadata) {
       const files = await Promise.all(metadata.files.map(async (file) => {
         try {
-          return { id: file.id, name: file.name, size: (await stat(/* turbopackIgnore: true */ storedFilePath(folderName, file.storedName))).size };
+          return {
+            id: file.id,
+            name: file.name,
+            size: (await stat(/* turbopackIgnore: true */ storedFilePath(folderName, file.storedName))).size,
+            downloadCount: complete ? Math.max(0, Number(file.downloads) || 0) : 0,
+          };
         } catch {
-          return { id: file.id, name: file.name, size: 0 };
+          return {
+            id: file.id,
+            name: file.name,
+            size: 0,
+            downloadCount: complete ? Math.max(0, Number(file.downloads) || 0) : 0,
+          };
         }
       }));
       const expired = complete && transferIsExpired(metadata);
@@ -594,6 +615,7 @@ async function adminTransferFromEntry(entry: Dirent): Promise<AdminTransfer | nu
         id: null,
         name: file.name,
         size: (await stat(/* turbopackIgnore: true */ path.join(/* turbopackIgnore: true */ folder, file.name))).size,
+        downloadCount: 0,
       })));
     return {
       folderName,

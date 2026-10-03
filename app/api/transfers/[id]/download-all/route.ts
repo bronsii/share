@@ -102,7 +102,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     });
   }
 
-  await incrementTransferStat(id, "downloads");
+  await incrementTransferStat(id, "downloads", manifest.files.map((file) => file.id));
   try {
     const stream = createZipStream(sources);
     stream.once("close", releaseDownload);

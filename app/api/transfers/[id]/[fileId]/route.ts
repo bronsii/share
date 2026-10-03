@@ -90,7 +90,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       headers: { "Retry-After": "2", "Cache-Control": "no-store" },
     });
   }
-  await incrementTransferStat(id, "downloads");
+  await incrementTransferStat(id, "downloads", [fileId]);
   try {
     const stream = createReadStream(object.path);
     stream.once("close", releaseDownload);
