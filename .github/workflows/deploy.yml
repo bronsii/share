@@ -125,6 +125,7 @@ jobs:
               echo "Sendebude did not become ready in time." >&2
               exit 1
             fi
+            echo "Readiness attempt $attempt failed." >&2
             sleep 1
           done
 
