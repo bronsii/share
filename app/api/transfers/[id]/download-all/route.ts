@@ -1,4 +1,5 @@
 import { deleteTransfer, getStoredFile, getTransfer, incrementTransferStat } from "@/lib/storage";
+import { lookupAccessLocation } from "@/lib/access-location";
 import { createZipStream, type ZipSource } from "@/lib/zip-stream";
 import { Readable } from "node:stream";
 import {
@@ -102,7 +103,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     });
   }
 
-  await incrementTransferStat(id, "downloads", manifest.files.map((file) => file.id));
+  const downloadLocation = lookupAccessLocation(request);
+  await incrementTransferStat(id, "downloads", manifest.files.map((file) => file.id), downloadLocation);
   try {
     const stream = createZipStream(sources);
     stream.once("close", releaseDownload);

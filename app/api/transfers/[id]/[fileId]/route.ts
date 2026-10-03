@@ -1,4 +1,5 @@
 import { deleteTransfer, getStoredFile, getTransfer, incrementTransferStat } from "@/lib/storage";
+import { lookupAccessLocation } from "@/lib/access-location";
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import {
@@ -90,7 +91,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       headers: { "Retry-After": "2", "Cache-Control": "no-store" },
     });
   }
-  await incrementTransferStat(id, "downloads", [fileId]);
+  const downloadLocation = lookupAccessLocation(request);
+  await incrementTransferStat(id, "downloads", [fileId], downloadLocation);
   try {
     const stream = createReadStream(object.path);
     stream.once("close", releaseDownload);
