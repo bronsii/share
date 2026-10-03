@@ -1,0 +1,141 @@
+name: Deploy Sendebude
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: sendebude-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+      SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+      SSH_USER: ${{ secrets.DEPLOY_USER }}
+
+    steps:
+      - name: Validate deployment secrets
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Update, verify and restart Sendebude
+        run: |
+          set -euo pipefail
+          port="${SSH_PORT:-22}"
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -p "$port" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" 'bash -se' <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          readonly app_dir=/srv/apps/share
+          readonly app_service=share.service
+          readonly cleanup_timer=share-cleanup.timer
+
+          cd "$app_dir"
+          test -d .git
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+          git switch main
+          git fetch --prune origin main
+          previous_commit="$(git rev-parse HEAD)"
+          target_commit="$(git rev-parse origin/main)"
+          git merge-base --is-ancestor "$previous_commit" "$target_commit"
+
+          services_stopped=false
+          deploy_finished=false
+
+          recover_previous_release() {
+            exit_code=$?
+            if [ "$deploy_finished" = true ]; then
+              return
+            fi
+
+            if [ "$services_stopped" = true ]; then
+              echo "Deployment failed; rebuilding the previous release." >&2
+              sudo systemctl stop "$cleanup_timer" || true
+              sudo systemctl stop "$app_service" || true
+              git switch --detach "$previous_commit" || true
+              PATH=/opt/node/bin:$PATH npm ci || true
+              PATH=/opt/node/bin:$PATH npm run build || true
+              sudo systemctl start "$app_service" || true
+              sudo systemctl start "$cleanup_timer" || true
+            fi
+            exit "$exit_code"
+          }
+          trap recover_previous_release EXIT
+
+          sudo systemctl stop "$cleanup_timer"
+          sudo systemctl stop "$app_service"
+          services_stopped=true
+
+          git pull --ff-only origin main
+          export PATH=/opt/node/bin:$PATH
+          npm ci
+          npm run check
+
+          systemd-analyze verify \
+            deploy/share.service \
+            deploy/share-cleanup.service \
+            deploy/share-cleanup.timer
+          sudo install -o root -g root -m 0644 deploy/share.service /etc/systemd/system/share.service
+          sudo install -o root -g root -m 0644 deploy/share-cleanup.service /etc/systemd/system/share-cleanup.service
+          sudo install -o root -g root -m 0644 deploy/share-cleanup.timer /etc/systemd/system/share-cleanup.timer
+          sudo systemctl daemon-reload
+
+          sudo systemctl start "$app_service"
+          sudo systemctl start "$cleanup_timer"
+
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              echo "Sendebude did not become ready in time." >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          systemctl is-active --quiet "$app_service"
+          systemctl is-active --quiet "$cleanup_timer"
+          deploy_finished=true
+          trap - EXIT
+          REMOTE_SCRIPT
+
+      - name: Verify public website
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://sendebude.de/ >/dev/null
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 https://sendebude.de/verwaltung >/dev/null
